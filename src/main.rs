@@ -1,10 +1,41 @@
 mod agent;
 mod functions;
 mod container;
+mod action;
 
 use container::Container;
 
 fn main() {
-    let container = Container::create(&functions::rastrigin, 50, 5, (-5.12, 5.12));
+    let mut container = Container::create(&functions::rastrigin, 4, 3, (-5.12, 5.12));
     println!("{}", container);
+
+    //Stop condition: stop after turn_limit turns
+    let turn_limit = 2;
+
+    for turn_number in 1..=turn_limit {
+        println!{"====================================== TURN {} ======================================", turn_number}
+        println!{"==> Removing dead agents "}
+        container.remove_dead_agents();
+
+        println!{"==> Determining agent actions for this turn"}
+        container.create_action_queue();
+        println!{"Action queue in turn {} BEFORE resolution:", turn_number}
+        container.print_action_queue();
+
+        println!{"==> Resolving actions for this turn"}
+        container.resolve_meetings();
+        //container.resolve_procreation();
+        println!{"Action queue in turn {} AFTER resolution :", turn_number}
+        container.print_action_queue();
+
+        println!{"==> Executing actions for turn {}:", turn_number}
+        //container.execute_actions();
+
+        println!{"==> Turn is now over. Fitness of the agents at the end of turn {}:", turn_number}
+        container.print_agent_fitness();
+
+        println!{"==================================== END TURN {} ====================================\n\n", turn_number}
+        container.clear_action_queue();
+
+    }
 }
