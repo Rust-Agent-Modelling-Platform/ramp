@@ -1,10 +1,10 @@
 use std::f64::consts::PI;
 
 pub fn rastrigin(genotype: &Vec<f64>) -> f64 {
-    let A: f64 = 10.0;
+    let _a: f64 = 10.0;
 
     let sum: f64 = genotype.iter()
-                           .map(|x| x.powf(2.0) - A * (2.0 * PI * (*x)).cos())
+                           .map(|x| x.powf(2.0) - _a * (2.0 * PI * (*x)).cos())
                            .sum();
-    A * genotype.len() as f64 + sum
+    _a * genotype.len() as f64 + sum
 }

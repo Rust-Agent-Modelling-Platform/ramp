@@ -23,19 +23,22 @@ impl Agent {
     }
 
     pub fn get_action(&self) -> Action {
-        let prob = thread_rng().gen_range(0.0, 1.0);
-        match self.energy {
-            x if x <= 0 => Action::Death(self.id),
-            x if (x > 0) && (x < 90) => Action::Meeting(self.id, self.id),
-            x if x >= 90 =>
-                if prob > 0.5 {
-                    Action::Meeting(self.id, self.id)
-                } else {
-                    Action::Procreation(self.id, self.id)
-                }
-            _ => Action::Migration(self.id)
+        let prob = thread_rng().gen_range(1, 100);
+        if self.energy <= 0 {
+            Action::Death(self.id)
+        } else if prob == 1 {
+            Action::Migration(self.id)
+        } else if self.energy > 0 && self.energy < 90 {
+            Action::Meeting(self.id, Uuid::nil())
+        } else {
+            if prob > 50 {
+                Action::Procreation(self.id, Uuid::nil())
+            } else {
+                Action::Meeting(self.id, Uuid::nil())
+            }
         }
     }
+
 
 }
 
