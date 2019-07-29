@@ -189,7 +189,11 @@ impl Container {
 
     pub fn remove_dead_agents(&mut self) {
         for action in &self.action_queue {
-            if let Action::Death(id1) = action {
+            if let Action::Death(id1) = action  {
+                let (index, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id1).unwrap();
+                self.agents.remove(index);
+            }
+            if let Action::Migration(id1) = action  {
                 let (index, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id1).unwrap();
                 self.agents.remove(index);
             }
@@ -197,15 +201,33 @@ impl Container {
         self.action_queue.retain(|x| {
             match x {
                 Action::Death(_) => false,
+                Action::Migration(_) => false,
                 _ => true
             }
         });
     }
 
-    pub fn remove_non_actions(&mut self) {
+
+    pub fn remove_none_actions (&mut self) {
         self.action_queue.retain(|x| {
             match x {
                 Action::None(_) => false,
+                _ => true
+            }
+        });
+    }
+
+
+    pub fn remove_migrants(&mut self ) {
+        for action in &self.action_queue {
+            if let Action::Migration(id1) = action {
+                let (index, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id1).unwrap();
+                self.agents.remove(index);
+            }
+        }
+        self.action_queue.retain(|x| {
+            match x {
+                Action::Migration(_) => false,
                 _ => true
             }
         });

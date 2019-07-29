@@ -21,7 +21,10 @@ fn main() {
         container.remove_dead_agents();
 
         println!{"==> Removing None actions"}
-        container.remove_non_actions();
+        container.remove_none_actions();
+
+        println!{"==> Temporary solution: just remove those agents that want to migrate"}
+        container.remove_migrants();
 
         println!{"==> Determining agent actions for this turn"}
         container.create_action_queue();
@@ -31,6 +34,7 @@ fn main() {
         println!{"==> Resolving actions for this turn"}
         container.resolve_meetings();
         container.resolve_procreation();
+
         println!{"Action queue in turn {} AFTER resolution :", turn_number}
         container.print_action_queue();
 
