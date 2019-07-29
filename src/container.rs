@@ -184,6 +184,16 @@ impl Container {
     pub fn execute_actions(&mut self) {
         self.execute_meetings();
         self.execute_procreation();
+
+        //cleanup
+        self.action_queue.retain(|x| {
+            match x {
+                Action::Meeting(_,_) => false,
+                Action::Procreation(_,_) => false,
+                _ => true
+            }
+        });
+
     }
 
 
@@ -193,15 +203,10 @@ impl Container {
                 let (index, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id1).unwrap();
                 self.agents.remove(index);
             }
-            if let Action::Migration(id1) = action  {
-                let (index, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id1).unwrap();
-                self.agents.remove(index);
-            }
         }
         self.action_queue.retain(|x| {
             match x {
                 Action::Death(_) => false,
-                Action::Migration(_) => false,
                 _ => true
             }
         });
@@ -239,9 +244,11 @@ impl Container {
         self.agents.retain(|agent| agent.id != id)
     }
 
+
     fn remove_agents(&mut self, ids: Vec<Uuid>) {
         self.agents.retain(|agent| !ids.contains(&agent.id))
     }
+
 
     fn execute_meetings(&mut self) {
         for action in &self.action_queue {
@@ -258,12 +265,6 @@ impl Container {
                 }
             }
         }
-        self.action_queue.retain(|x| {
-            match x {
-                Action::Meeting(_,_) => false,
-                _ => true
-            }
-        });
     }
 
     fn execute_procreation(&mut self) {
@@ -272,38 +273,51 @@ impl Container {
                 let (index1, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id1).unwrap();
                 let (index2, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id2).unwrap();
 
-                let head = &self.agents[index1].genotype[..1];
-                let tail = &self.agents[index2].genotype[1..];
+                //incur penalty for procreation
+                self.agents[index1].energy-=10;
+                self.agents[index2].energy-=10;
 
+                //create new genotype
                 let mut new_genotype = vec![];
-                new_genotype.extend_from_slice(head);
-                new_genotype.extend_from_slice(tail);
+
+                //crossover
+                self.crossover(index1, index2, &mut new_genotype);
+
+                //mutate the new genotype
+                self.mutate_genotype(&mut new_genotype);
 
                 let new_agent = Agent::create(new_genotype , &functions::rastrigin);
-
-                //println!("NEW AGENT {}", new_agent);
+                println!("NEW AGENT {}", new_agent);
 
                 self.agents.push(new_agent);
-
             }
         }
-        self.action_queue.retain(|x| {
-            match x {
-                Action::Procreation(_,_) => false,
-                _ => true
-            }
-        });
     }
 
-    //fn mutate() { }
-    //fn crossover() {}
+
+    fn mutate_genotype(&self, genotype: &mut Vec<f64>) {
+        let length = genotype.len();
+        let gene = thread_rng().gen_range(0, genotype.len() - 1);
+        //TODO: range should not be hardcoded
+        genotype[gene] = thread_rng().gen_range(-5.12, 5.12);
+    }
 
 
-    // =============================================== Public utility methods ==============================================
+    fn crossover(&self, id1: usize, id2: usize, genotype: &mut Vec<f64>) {
+        //TODO: ranges cannot be hardcoded
+        let head = &self.agents[id1].genotype[..1];
+        let tail = &self.agents[id2].genotype[1..];
+        genotype.extend_from_slice(head);
+        genotype.extend_from_slice(tail);
+    }
+
+
+    // =============================================== Public utility methods =========================================================
     pub fn print_action_queue(&self) {
         for action in &self.action_queue {
             println!("{}", action)
         }
+        println!("Nr of entries in this queue: {}", self.action_queue.len());
     }
 
     pub fn print_agent_stats(&self) {

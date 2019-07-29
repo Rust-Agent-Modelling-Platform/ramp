@@ -23,7 +23,7 @@ impl fmt::Display for Action {
     }
 }
 
-//non-ownership-taking implementation
+//non-ownership-taking implementation (?)
 impl PartialEq for Action {
     fn eq(&self, other: &Self) -> bool {
         use Action::*;

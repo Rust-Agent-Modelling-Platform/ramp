@@ -10,7 +10,7 @@ fn main() {
     println!("{}", container);
 
     //Stop condition: stop after turn_limit turns
-    let turn_limit = 5;
+    let turn_limit = 1;
 
     for turn_number in 1..=turn_limit {
         println!{"====================================== TURN {} ======================================", turn_number}
