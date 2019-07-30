@@ -6,34 +6,60 @@ use crate::agent::Agent;
 use crate::action::Action;
 
 use crate::functions;
+use std::collections::HashMap;
 
 pub struct Container {
     pub id: Uuid,
-    pub agents: Vec<Agent>,
+    pub agents: HashMap<Uuid, Agent>,
     pub turn_number: u64,
-    pub action_queue: Vec<Action>
+    pub action_queue: Vec<Action>,
+    pub dim: i32,
+    pub interval: (f64, f64),
+
+    pub dead_ids: Vec<Uuid>,
+    pub meeting_ids: Vec<Uuid>,
+    pub procreating_ids: Vec<Uuid>,
+    pub migrating_ids: Vec<Uuid>,
+    pub none_ids: Vec<Uuid>
 }
 impl Container {
-    pub fn create(calculate_fitness: &Fn(&Vec<f64>) -> f64, agents_number: i32, dim: i32, interval: (f64, f64)) -> Container {
-        let agents: Vec<Agent> = (0..agents_number).map(|_| {
+    pub fn create(calculate_fitness: & dyn Fn(&Vec<f64>) -> f64, agents_number: i32, dim: i32, interval: (f64, f64)) -> Container {
+        let mut agents_hm = HashMap::new();
+
+        for i in 0..agents_number {
             let genotype: Vec<f64> = (0..dim).map(|_| {
                 thread_rng().gen_range(interval.0, interval.1)
             }).collect();
-            Agent::create(genotype, calculate_fitness)
-        }).collect();
+            let id = Uuid::new_v4();
+            agents_hm.insert( id, Agent::new(id, genotype, &functions::rastrigin) );
+        }
         Container {
             id: Uuid::new_v4(),
-            agents,
+            agents: agents_hm,
             turn_number: 0,
-            action_queue: Vec::new()
+            action_queue: Vec::new(),
+            dim,
+            interval,
+
+            dead_ids: Vec::new(),
+            meeting_ids: Vec::new(),
+            procreating_ids: Vec::new(),
+            migrating_ids: Vec::new(),
+            none_ids: Vec::new(),
         }
     }
 
 
-    pub fn create_action_queue(&mut self) {
-        for agent in &self.agents {
+    pub fn create_action_queues(&mut self) {
+        for (id, agent) in &self.agents {
             let action = agent.get_action();
-            self.action_queue.push(action);
+            match action {
+                Action::Death(id) => self.dead_ids.push(id),
+                Action::Meeting(id, _) => self.meeting_ids.push(id),
+                Action::Procreation(id, _) => self.procreating_ids.push(id),
+                Action::Migration(id) => self.migrating_ids.push(id),
+                Action::None(id) => self.none_ids.push(id),
+            }
         }
     }
 
@@ -41,68 +67,30 @@ impl Container {
     pub fn resolve_meetings(&mut self) {
         //1. First resolve meetings
         //a. get those who want a meeting
-        let mut want_meeting: Vec<&Action> = self.action_queue.iter()
-            .filter(|x| {
-                match **x {
-                    Action::Meeting(_, _) => true,
-                    _ => false
-                }
-            }).collect();
-
-        println! {"Number of agents that want a meeting this turn: {}", want_meeting.len()}
-        if want_meeting.len() % 2 != 0 { println! {"There is an agent without a pair - gets the None action"} }
+        println! {"Number of agents that want a meeting this turn: {}", self.meeting_ids.len()}
+        if self.meeting_ids.len() % 2 != 0 { println! {"There is an agent without a pair - gets the None action"} }
 
         //b. construct a meeting from them
         //if nobody wants to meet - great
-        if want_meeting.len() == 0 { return }
-
-        //temp structures - both get dropped at the end of the function
-        let mut new_actions_list = Vec::new();
-        let mut ids = Vec::new();
+        if self.meeting_ids.len() == 0 { return }
 
         //for now, just get anybody to meet with
         //first deal with uneven agent, set his action to be None(uuid)
-        if want_meeting.len() % 2 == 1 {
-            let old_action = want_meeting.pop().unwrap();
-            let id = match *old_action {
-                Action::Meeting(id, _) => id,
-                _ => Uuid::nil()
-            };
-            let new_action = Action::None(id);
-            new_actions_list.push(new_action);
-            ids.push(id);
+        if self.meeting_ids.len() % 2 == 1 {
+            let id = self.meeting_ids.pop().unwrap();
+            self.none_ids.push(id);
         }
 
         //rest of dudes meet
         //add meeting action with different values to temp list
-        if want_meeting.len() % 2 != 1 {
-            while want_meeting.len() != 0 {
-                let action_1 = want_meeting.pop().unwrap();
-                let id1 = match *action_1 {
-                    Action::Meeting(id, _) => id,
-                    _ => Uuid::nil()
-                };
-
-                let action_2 = want_meeting.pop().unwrap();
-                let id2 = match *action_2 {
-                    Action::Meeting(id, _) => id,
-                    _ => Uuid::nil()
-                };
+        if self.meeting_ids.len() % 2 != 1 {
+            while self.meeting_ids.len() != 0 {
+                let id1 = self.meeting_ids.pop().unwrap();
+                let id2 = self.meeting_ids.pop().unwrap();
 
                 let new_action = Action::Meeting(id1, id2);
-                new_actions_list.push(new_action);
-                ids.push(id1);
-                ids.push(id2);
+                self.action_queue.push(new_action);
             }
-        }
-        //substitute in action_queue according to temp list
-        self.action_queue.retain(|action|
-            match action {
-                Action::Meeting(_, _) => false,
-                _ => true
-            });
-        for action in new_actions_list {
-            self.action_queue.push(action);
         }
     }
 
@@ -110,68 +98,30 @@ impl Container {
     pub fn resolve_procreation(&mut self) {
         //2. Resolve procreation
         //a. get those who want to procreate
-        let mut want_procreation: Vec<&Action> = self.action_queue.iter()
-            .filter(|x| {
-                match **x {
-                    Action::Procreation(_, _) => true,
-                    _ => false
-                }
-            }).collect();
-
-        println! {"Number of agents that want to procreate this turn: {}", want_procreation.len()}
-        if want_procreation.len() % 2 != 0 { println! {"There is an agent without a pair - gets the None action"} }
+        println! {"Number of agents that want to procreate this turn: {}", self.procreating_ids.len()}
+        if self.procreating_ids.len() % 2 != 0 { println! {"There is an agent without a pair - gets the None action"} }
 
         //b. construct a meeting from them
         //if nobody wants to meet - great
-        if want_procreation.len() == 0 { return }
-
-        //temp structures - both get dropped at the end of the function
-        let mut new_actions_list = Vec::new();
-        let mut ids = Vec::new();
+        if self.procreating_ids.len() == 0 { return }
 
         //for now, just get anybody to procreate with
         //first deal with uneven agent, set his action to be None(uuid)
-        if want_procreation.len() % 2 == 1 {
-            let old_action = want_procreation.pop().unwrap();
-            let id = match *old_action {
-                Action::Procreation(id, _) => id,
-                _ => Uuid::nil()
-            };
-            let new_action = Action::None(id);
-            new_actions_list.push(new_action);
-            ids.push(id);
+        if self.procreating_ids.len() % 2 == 1 {
+            let id = self.procreating_ids.pop().unwrap();
+            self.none_ids.push(id);
         }
 
         //rest of dudes meet
         //add meeting action with different values to temp list
-        if want_procreation.len() % 2 != 1 {
-            while want_procreation.len() != 0 {
-                let action_1 = want_procreation.pop().unwrap();
-                let id1 = match *action_1 {
-                    Action::Procreation(id, _) => id,
-                    _ => Uuid::nil()
-                };
-
-                let action_2 = want_procreation.pop().unwrap();
-                let id2 = match *action_2 {
-                    Action::Procreation(id, _) => id,
-                    _ => Uuid::nil()
-                };
+        if self.procreating_ids.len() % 2 != 1 {
+            while self.procreating_ids.len() != 0 {
+                let id1 = self.meeting_ids.pop().unwrap();
+                let id2 = self.meeting_ids.pop().unwrap();
 
                 let new_action = Action::Procreation(id1, id2);
-                new_actions_list.push(new_action);
-                ids.push(id1);
-                ids.push(id2);
+                self.action_queue.push(new_action);
             }
-        }
-        //substitute in action_queue according to temp list
-        self.action_queue.retain(|action|
-            match action {
-                Action::Procreation(_, _) => false,
-                _ => true
-            });
-        for action in new_actions_list {
-            self.action_queue.push(action);
         }
     }
 
@@ -183,117 +133,73 @@ impl Container {
 
     pub fn execute_actions(&mut self) {
         self.execute_meetings_and_procreation();
-        //self.execute_procreation();
-
-        //cleanup
-        self.action_queue.retain(|x| {
-            match x {
-                Action::Meeting(_,_) => false,
-                Action::Procreation(_,_) => false,
-                _ => true
-            }
-        });
 
     }
 
 
     pub fn remove_dead_agents(&mut self) {
-        for action in &self.action_queue {
-            if let Action::Death(id1) = action  {
-                let (index, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id1).unwrap();
-                self.agents.remove(index);
-            }
+        for id in &self.dead_ids {
+                self.agents.remove(id);
         }
-        self.action_queue.retain(|x| {
-            match x {
-                Action::Death(_) => false,
-                _ => true
-            }
-        });
     }
 
 
-    pub fn remove_none_actions (&mut self) {
-        self.action_queue.retain(|x| {
-            match x {
-                Action::None(_) => false,
-                _ => true
-            }
-        });
-    }
-
-
-    pub fn remove_migrants(&mut self ) {
-        for action in &self.action_queue {
-            if let Action::Migration(id1) = action {
-                let (index, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id1).unwrap();
-                self.agents.remove(index);
-            }
+    pub fn remove_migrants(&mut self) {
+        for id in &self.migrating_ids {
+            self.agents.remove(id);
         }
-        self.action_queue.retain(|x| {
-            match x {
-                Action::Migration(_) => false,
-                _ => true
-            }
-        });
     }
 
 
     // ================================================ Private methods ====================================================
     fn remove_one_agent(&mut self, id: Uuid) {
-        self.agents.retain(|agent| agent.id != id)
+        self.agents.remove(&id);
     }
 
 
     fn remove_agents(&mut self, ids: Vec<Uuid>) {
-        self.agents.retain(|agent| !ids.contains(&agent.id))
+        for id in &ids {
+            self.agents.remove(id);
+        }
     }
 
 
     fn execute_meetings_and_procreation(&mut self) {
         for action in &self.action_queue {
             if let Action::Meeting(id1, id2) = action {
-                let (index1, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id1).unwrap();
-                let (index2, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id2).unwrap();
-
-                if self.agents[index1].fitness < self.agents[index2].fitness  {
-                    self.agents[index1].energy+=40;
-                    self.agents[index2].energy-=40;
+                if self.agents.get_mut(id1).unwrap().fitness < self.agents.get_mut(id2).unwrap().fitness  {
+                    self.agents.get_mut(id1).unwrap().energy+=40;
+                    self.agents.get_mut(id2).unwrap().energy-=40;
                 } else {
-                    self.agents[index2].energy+=40;
-                    self.agents[index1].energy-=40;
+                    self.agents.get_mut(id2).unwrap().energy+=40;
+                    self.agents.get_mut(id1).unwrap().energy-=40;
                 }
             }
             if let Action::Procreation(id1, id2) = action {
-                let (index1, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id1).unwrap();
-                let (index2, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id2).unwrap();
-
                 //incur penalty for procreation
-                self.agents[index1].energy-=10;
-                self.agents[index2].energy-=10;
+                self.agents.get_mut(id1).unwrap().energy-=10;
+                self.agents.get_mut(id2).unwrap().energy-=10;
 
                 //create new genotype
                 let mut new_genotype = vec![];
 
                 //crossover
-                self.crossover(index1, index2, &mut new_genotype);
+                self.crossover(*id1, *id2, &mut new_genotype);
 
                 //mutate the new genotype
                 self.mutate_genotype(&mut new_genotype);
 
-                let new_agent = Agent::create(new_genotype , &functions::rastrigin);
+                let uuid = Uuid::new_v4();
+                let new_agent = Agent::new(uuid, new_genotype , &functions::rastrigin);
                 println!("NEW AGENT {}", new_agent);
 
-                self.agents.push(new_agent);
+                self.agents.insert(uuid, new_agent);
             }
-
-
         }
     }
 
     fn execute_procreation(&mut self) {
         for action in &self.action_queue {
-
         }
     }
 
@@ -306,16 +212,16 @@ impl Container {
     }
 
 
-    fn crossover(&self, id1: usize, id2: usize, genotype: &mut Vec<f64>) {
+    fn crossover(&self, id1: Uuid, id2: Uuid, genotype: &mut Vec<f64>) {
         //TODO: ranges cannot be hardcoded
-        let head = &self.agents[id1].genotype[..1];
-        let tail = &self.agents[id2].genotype[1..];
+        let head = &self.agents[&id1].genotype[..1];
+        let tail = &self.agents[&id2].genotype[1..];
         genotype.extend_from_slice(head);
         genotype.extend_from_slice(tail);
     }
-
-
-    // =============================================== Public utility methods =========================================================
+//
+//
+//    // =============================================== Public utility methods =========================================================
     pub fn print_action_queue(&self) {
         for action in &self.action_queue {
             println!("{}", action)
@@ -324,7 +230,7 @@ impl Container {
     }
 
     pub fn print_agent_stats(&self) {
-        for agent in &self.agents {
+        for (id, agent) in &self.agents {
             println!("Agent {}: Fitness - {}, energy - {}", &agent.id.to_string()[..5], agent.fitness, agent.energy)
         }
     }

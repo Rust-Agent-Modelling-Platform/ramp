@@ -12,10 +12,9 @@ pub struct Agent {
 }
 
 impl Agent {
-
-    pub fn create(genotype: Vec<f64>, calculate_fitness: &Fn(&Vec<f64>) -> f64) -> Agent {
+    pub fn new(id: Uuid, genotype: Vec<f64>, calculate_fitness: &Fn(&Vec<f64>) -> f64) -> Agent {
         Agent { 
-            id: Uuid::new_v4(),
+            id,
             energy: 100,
             fitness: calculate_fitness(&genotype),
             genotype,
@@ -38,8 +37,6 @@ impl Agent {
             }
         }
     }
-
-
 }
 
 
