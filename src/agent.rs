@@ -1,7 +1,8 @@
 use std::fmt;
 use uuid::Uuid;
-use crate::action::Action;
 use rand::{thread_rng, Rng};
+
+use crate::action::Action;
 
 #[derive(Debug)]
 pub struct Agent {
@@ -21,6 +22,21 @@ impl Agent {
         }
     }
 
+    pub fn mutate_genotype(genotype: &mut Vec<f64>, interval: (f64, f64)) {
+        let gene = thread_rng().gen_range(0, genotype.len() - 1);
+        genotype[gene] = thread_rng().gen_range(interval.0, interval.1);
+    }
+
+    pub fn crossover(genotype1: &Vec<f64>, genotype2: &Vec<f64>) -> Vec<f64>{
+        let division_point = thread_rng().gen_range(0, genotype1.len());
+        let mut new_genotype = vec![];
+        let head = &genotype1[..division_point];
+        let tail = &genotype2[division_point..];
+        new_genotype.extend_from_slice(head);
+        new_genotype.extend_from_slice(tail);
+        new_genotype
+    }
+
     pub fn get_action(&self) -> Action {
         let prob = thread_rng().gen_range(1, 100);
         if self.energy <= 0 {
@@ -38,7 +54,6 @@ impl Agent {
         }
     }
 }
-
 
 impl fmt::Display for Agent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
