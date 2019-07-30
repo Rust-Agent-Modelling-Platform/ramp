@@ -182,8 +182,8 @@ impl Container {
 
 
     pub fn execute_actions(&mut self) {
-        self.execute_meetings();
-        self.execute_procreation();
+        self.execute_meetings_and_procreation();
+        //self.execute_procreation();
 
         //cleanup
         self.action_queue.retain(|x| {
@@ -250,25 +250,20 @@ impl Container {
     }
 
 
-    fn execute_meetings(&mut self) {
+    fn execute_meetings_and_procreation(&mut self) {
         for action in &self.action_queue {
             if let Action::Meeting(id1, id2) = action {
                 let (index1, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id1).unwrap();
                 let (index2, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id2).unwrap();
 
-                if self.agents[index1].fitness > self.agents[index2].fitness  {
+                if self.agents[index1].fitness < self.agents[index2].fitness  {
                     self.agents[index1].energy+=40;
                     self.agents[index2].energy-=40;
                 } else {
-                    self.agents[index2].energy-=40;
-                    self.agents[index1].energy+=40;
+                    self.agents[index2].energy+=40;
+                    self.agents[index1].energy-=40;
                 }
             }
-        }
-    }
-
-    fn execute_procreation(&mut self) {
-        for action in &self.action_queue {
             if let Action::Procreation(id1, id2) = action {
                 let (index1, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id1).unwrap();
                 let (index2, _) = self.agents.iter().enumerate().find(|(_i, agent)| agent.id == *id2).unwrap();
@@ -291,6 +286,14 @@ impl Container {
 
                 self.agents.push(new_agent);
             }
+
+
+        }
+    }
+
+    fn execute_procreation(&mut self) {
+        for action in &self.action_queue {
+
         }
     }
 
