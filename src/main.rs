@@ -9,17 +9,14 @@ use uuid::Uuid;
 
 use crate::agent::Agent;
 
-const TURN_LIMIT: i32 = 200;
+const TURN_LIMIT: i32 = 1000;
 
 fn main() {
-    let mut container = Container::create(&functions::rastrigin, 4, 2, (-5.12, 5.12));
+    let mut container = Container::create(&functions::rastrigin, 50, 4, (-5.12, 5.12), 200);
     for turn_number in 1..=TURN_LIMIT {
         println!{"====================================== TURN {} ======================================", turn_number}
         println!{"==> Action queue at start of the turn: "}
         container.print_action_queue();
-
-        println!{"==> Removing dead agents"}
-        container.remove_dead_agents();
 
         println!{"==> Temporary solution: just remove those agents that want to migrate"}
         container.remove_migrants();
@@ -30,8 +27,8 @@ fn main() {
         container.print_action_queue();
 
         println!{"==> Resolving actions for this turn"}
-        container.resolve_meetings();
         container.resolve_procreation();
+        container.resolve_meetings();
 
         println!{"==> Turn is now over. Fitness and energy of the agents at the end of turn {}:", turn_number}
         container.print_agent_stats();
@@ -39,7 +36,13 @@ fn main() {
         println!{"==> Action queue at the end of {}:", turn_number}
         container.print_action_queue();
 
-        container.clear_action_queue();
+        println!("Total number of agents at the end of turn {}:", turn_number);
+        container.print_agent_count();
+
+        println!{"==> Removing dead agents"}
+        container.remove_dead_agents();
+
+        container.clear_action_queues();
 
         println!{"==================================== END TURN {} ====================================\n\n", turn_number}
     }

@@ -23,8 +23,14 @@ impl Agent {
     }
 
     pub fn mutate_genotype(genotype: &mut Vec<f64>, interval: (f64, f64)) {
-        let gene = thread_rng().gen_range(0, genotype.len() - 1);
-        genotype[gene] = thread_rng().gen_range(interval.0, interval.1);
+        let gene1 = thread_rng().gen_range(0, genotype.len() - 1);
+        let gene2 = thread_rng().gen_range(0, genotype.len() - 1);
+
+        let delta1 = thread_rng().gen_range(-0.1, 0.1);
+        let delta2 = thread_rng().gen_range(-0.1, 0.1);
+
+        genotype[gene1]+=delta1;
+        genotype[gene2]+=delta2;
     }
 
     pub fn crossover(genotype1: &Vec<f64>, genotype2: &Vec<f64>) -> Vec<f64>{

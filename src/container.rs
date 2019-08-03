@@ -10,6 +10,7 @@ use crate::functions;
 pub struct Container {
     pub id: Uuid,
     pub id_agent_map: HashMap<Uuid, Agent>,
+    pub max_agent_num: usize,
     pub turn_number: u64,
     pub action_queue: Vec<Action>,
     pub dim: i32,
@@ -17,13 +18,13 @@ pub struct Container {
 
     pub dead_ids: Vec<Uuid>,
     pub meeting_ids: Vec<Uuid>,
-    pub procreating_ids: Vec<Uuid>,
+    pub procreating_ids: Vec<(Uuid, f64)>,
     pub migrating_ids: Vec<Uuid>,
 }
 
 impl Container {
-    pub fn create(calculate_fitness: & dyn Fn(&Vec<f64>) -> f64, agents_number: i32, dim: i32, interval: (f64, f64)) -> Container {
-        let mut id_agent_map: HashMap<Uuid, Agent> = HashMap::new();
+    pub fn create(calculate_fitness: & dyn Fn(&Vec<f64>) -> f64, agents_number: i32, dim: i32, interval: (f64, f64), max_agent_num: usize) -> Container {
+        let mut id_agent_map: HashMap<Uuid, Agent> = HashMap::with_capacity(max_agent_num);
 
         for i in 0..agents_number {
             let genotype: Vec<f64> = (0..dim).map(|_| {
@@ -35,6 +36,7 @@ impl Container {
         Container {
             id: Uuid::new_v4(),
             id_agent_map,
+            max_agent_num,
             turn_number: 0,
             action_queue: Vec::new(),
             dim,
@@ -53,10 +55,53 @@ impl Container {
             match action {
                 Action::Death(id) => self.dead_ids.push(id),
                 Action::Meeting(id, _) => self.meeting_ids.push(id),
-                Action::Procreation(id, _) => self.procreating_ids.push(id),
+                Action::Procreation(id, _) => self.procreating_ids.push((id, agent.fitness)),
                 Action::Migration(id) => self.migrating_ids.push(id),
             }
         }
+    }
+
+    pub fn resolve_procreation(&mut self) {
+        println! {"Number of agents that want to procreate this turn: {}", self.procreating_ids.len()}
+        if self.procreating_ids.len() % 2 != 0 { println! {"There is an agent without a pair - gets the None action"} }
+
+        if self.procreating_ids.len() == 0 { return }
+
+        // no pair - just remove him at this moment
+        if self.procreating_ids.len() % 2 == 1 {
+            self.procreating_ids.pop().unwrap();
+        }
+
+        //sort the vector by fitness and procreate
+        //we want the agents to mate in order of fitness
+        //docs claim implementation of sort_by is O(n log(n)) worst-case
+        //sorted from lowest to highest fitness, reverse a and b below to get opposite ordering
+        self.procreating_ids.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        println!(" SORTED =============== {:?}", self.procreating_ids);
+
+        //check hashmap capacity to see how many new agents can be created
+        let mut free_places_in_map = self.max_agent_num - self.id_agent_map.keys().len();
+        let mut places_required = self.procreating_ids.len() / 2;
+        println!("Free: {}, needed: {}", free_places_in_map, places_required);
+
+        //procreate as many as you can
+        while free_places_in_map > 0  && places_required != 0 {
+            let id1 = self.procreating_ids.pop().unwrap();
+            let id2 = self.procreating_ids.pop().unwrap();
+            self.procreate(id1.0, id2.0);
+            free_places_in_map-=1;
+            places_required-=1;
+        }
+
+        //add rest to meeting_ids
+        //TODO: optimize with vec::append method
+        for (id, fitness) in &self.procreating_ids {
+            self.meeting_ids.push(*id);
+        }
+        //println!("Procreation queue at end of resolve_procreation (should be on meeting list): {:?}", self.procreating_ids);
+        //println!("Meeting queue at end of resolve_procreation: {:?}", self.meeting_ids);
+
+        self.procreating_ids.clear();
     }
 
     pub fn resolve_meetings(&mut self) {
@@ -66,9 +111,8 @@ impl Container {
 
         // no pair - just remove him at this moment
         if self.meeting_ids.len() % 2 == 1 {
-            let id = self.meeting_ids.pop();
+           self.meeting_ids.pop();
         }
-
         while self.meeting_ids.len() != 0 {
             let id1 = self.meeting_ids.pop().unwrap();
             let id2 = self.meeting_ids.pop().unwrap();
@@ -76,32 +120,16 @@ impl Container {
         }
     }
 
-    pub fn resolve_procreation(&mut self) {
-        println! {"Number of agents that want to procreate this turn: {}", self.procreating_ids.len()}
-        if self.procreating_ids.len() % 2 != 0 { println! {"There is an agent without a pair - gets the None action"} }
-
-        if self.procreating_ids.len() == 0 { return }
-        
-        // no pair - just remove him at this moment
-        if self.procreating_ids.len() % 2 == 1 {
-            self.procreating_ids.pop().unwrap();
-        }
-
-        while self.procreating_ids.len() != 0 {
-            let id1 = self.procreating_ids.pop().unwrap();
-            let id2 = self.procreating_ids.pop().unwrap();
-            self.procreate(id1, id2);
-        }
-    }
-
-    pub fn clear_action_queue(&mut self) {
+    pub fn clear_action_queues(&mut self) {
         self.action_queue.clear();
     }
 
     pub fn remove_dead_agents(&mut self) {
+        println!("{:?}", self.dead_ids);
         for id in &self.dead_ids {
                 self.id_agent_map.remove(id);
         }
+        self.dead_ids.clear();
     }
 
     pub fn remove_migrants(&mut self) {
@@ -133,17 +161,6 @@ impl Container {
 
         self.id_agent_map.insert(uuid, new_agent);
     }
-    
-    fn remove_one_agent(&mut self, id: Uuid) {
-        self.id_agent_map.remove(&id);
-    }
-
-
-    fn remove_agents(&mut self, ids: Vec<Uuid>) {
-        for id in &ids {
-            self.id_agent_map.remove(id);
-        }
-    }
 
     // =============================================== Public utility methods =========================================================
     pub fn print_action_queue(&self) {
@@ -158,8 +175,15 @@ impl Container {
             println!("Agent {}: Fitness - {}, energy - {}", &agent.id.to_string()[..5], agent.fitness, agent.energy)
         }
     }
+
+    pub fn print_agent_count(&self) {
+        println!("{}", self.id_agent_map.len());
+    }
+
 }
 
+
+    // =============================================== Trait implementations ===========================================================
 impl fmt::Display for Container {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Container {{\n id: {},\n agents{:#?}\n}}", self.id, self.id_agent_map)
