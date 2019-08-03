@@ -180,6 +180,17 @@ impl Container {
         println!("{}", self.id_agent_map.len());
     }
 
+    pub fn print_most_fit_agent(&self) {
+        let mut tg = Agent::new_dummy();
+        let mut top_guy = &tg;
+        for (uuid, agent) in &self.id_agent_map {
+            if agent.fitness > top_guy.fitness {
+                top_guy = agent;
+            }
+        }
+        println!("{}", top_guy);
+    }
+
 }
 
 

@@ -1,10 +1,11 @@
 use std::fmt;
 use uuid::Uuid;
 use rand::{thread_rng, Rng};
+use std::f64;
 
 use crate::action::Action;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Agent {
     pub id: Uuid,
     pub energy: i32,    
@@ -22,12 +23,21 @@ impl Agent {
         }
     }
 
+    pub fn new_dummy() -> Agent {
+        Agent {
+            id: Uuid::new_v4(),
+            energy: 100,
+            fitness: f64::NEG_INFINITY,
+            genotype: vec![],
+        }
+    }
+
     pub fn mutate_genotype(genotype: &mut Vec<f64>, interval: (f64, f64)) {
         let gene1 = thread_rng().gen_range(0, genotype.len() - 1);
         let gene2 = thread_rng().gen_range(0, genotype.len() - 1);
 
-        let delta1 = thread_rng().gen_range(-0.15, 0.15);
-        let delta2 = thread_rng().gen_range(-0.15, 0.15);
+        let delta1 = thread_rng().gen_range(-0.05, 0.05);
+        let delta2 = thread_rng().gen_range(-0.05, 0.05);
 
         genotype[gene1]+=delta1;
         genotype[gene2]+=delta2;

@@ -6,13 +6,16 @@ mod action;
 use container::Container;
 use std::collections::HashMap;
 use uuid::Uuid;
+use std::time::{Duration, Instant};
 
 use crate::agent::Agent;
 
 const TURN_LIMIT: i32 = 1000;
 
 fn main() {
-    let mut container = Container::create(&functions::rastrigin, 50, 4, (-5.12, 5.12), 200);
+    let now = Instant::now();
+
+    let mut container = Container::create(&functions::rastrigin, 500, 4, (-5.12, 5.12), 1000);
     for turn_number in 1..=TURN_LIMIT {
         println!{"====================================== TURN {} ======================================", turn_number}
         println!{"==> Action queue at start of the turn: "}
@@ -45,7 +48,12 @@ fn main() {
         container.clear_action_queues();
 
         println!{"==================================== END TURN {} ====================================\n\n", turn_number}
+
     }
+    println!("Time elapsed: {} seconds", now.elapsed().as_secs());
+
+    println!("At end of simulation the best agent is:");
+    container.print_most_fit_agent();
 
 //  ======================== 2d vectors and hashmaps ==============================================
 
