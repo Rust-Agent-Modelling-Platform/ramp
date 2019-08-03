@@ -17,7 +17,7 @@ pub struct Container {
     pub interval: (f64, f64),
 
     pub dead_ids: Vec<Uuid>,
-    pub meeting_ids: Vec<Uuid>,
+    pub meeting_ids: Vec<(Uuid, f64)>,
     pub procreating_ids: Vec<(Uuid, f64)>,
     pub migrating_ids: Vec<Uuid>,
 }
@@ -54,7 +54,7 @@ impl Container {
             let action = agent.get_action();
             match action {
                 Action::Death(id) => self.dead_ids.push(id),
-                Action::Meeting(id, _) => self.meeting_ids.push(id),
+                Action::Meeting(id, _) => self.meeting_ids.push((id, agent.fitness)),
                 Action::Procreation(id, _) => self.procreating_ids.push((id, agent.fitness)),
                 Action::Migration(id) => self.migrating_ids.push(id),
             }
@@ -96,7 +96,7 @@ impl Container {
         //add rest to meeting_ids
         //TODO: optimize with vec::append method
         for (id, fitness) in &self.procreating_ids {
-            self.meeting_ids.push(*id);
+            self.meeting_ids.push((*id, *fitness));
         }
         //println!("Procreation queue at end of resolve_procreation (should be on meeting list): {:?}", self.procreating_ids);
         //println!("Meeting queue at end of resolve_procreation: {:?}", self.meeting_ids);
@@ -109,13 +109,15 @@ impl Container {
         if self.meeting_ids.len() % 2 != 0 { println! {"There is an agent without a pair - gets the None action"} }
         if self.meeting_ids.len() == 0 { return }
 
+        //self.meeting_ids.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
         // no pair - just remove him at this moment
         if self.meeting_ids.len() % 2 == 1 {
            self.meeting_ids.pop();
         }
         while self.meeting_ids.len() != 0 {
-            let id1 = self.meeting_ids.pop().unwrap();
-            let id2 = self.meeting_ids.pop().unwrap();
+            let (id1, _) = self.meeting_ids.pop().unwrap();
+            let (id2, _) = self.meeting_ids.pop().unwrap();
             self.meet(id1, id2);
         }
     }
