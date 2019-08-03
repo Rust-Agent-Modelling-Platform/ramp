@@ -17,7 +17,7 @@ impl Agent {
         Agent { 
             id,
             energy: 100,
-            fitness: calculate_fitness(&genotype),
+            fitness: -calculate_fitness(&genotype),
             genotype,
         }
     }
@@ -26,8 +26,8 @@ impl Agent {
         let gene1 = thread_rng().gen_range(0, genotype.len() - 1);
         let gene2 = thread_rng().gen_range(0, genotype.len() - 1);
 
-        let delta1 = thread_rng().gen_range(-0.1, 0.1);
-        let delta2 = thread_rng().gen_range(-0.1, 0.1);
+        let delta1 = thread_rng().gen_range(-0.15, 0.15);
+        let delta2 = thread_rng().gen_range(-0.15, 0.15);
 
         genotype[gene1]+=delta1;
         genotype[gene2]+=delta2;

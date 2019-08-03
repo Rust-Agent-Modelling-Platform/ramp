@@ -140,7 +140,7 @@ impl Container {
 
     // ================================================ Private methods ====================================================
     fn meet(&mut self, id1: Uuid, id2: Uuid) {
-        if self.id_agent_map.get_mut(&id1).unwrap().fitness < self.id_agent_map.get_mut(&id2).unwrap().fitness  {
+        if self.id_agent_map.get_mut(&id1).unwrap().fitness > self.id_agent_map.get_mut(&id2).unwrap().fitness  {
             self.id_agent_map.get_mut(&id1).unwrap().energy+=40;
             self.id_agent_map.get_mut(&id2).unwrap().energy-=40;
         } else {
