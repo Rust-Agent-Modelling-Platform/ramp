@@ -23,7 +23,7 @@ pub struct Container {
 }
 
 impl Container {
-    pub fn create(calculate_fitness: & dyn Fn(&Vec<f64>) -> f64, agents_number: i32, dim: i32, interval: (f64, f64), max_agent_num: usize) -> Container {
+    pub fn new(calculate_fitness: & dyn Fn(&Vec<f64>) -> f64, agents_number: u32, dim: i32, interval: (f64, f64), max_agent_num: usize) -> Self {
         let mut id_agent_map: HashMap<Uuid, Agent> = HashMap::with_capacity(max_agent_num);
 
         for i in 0..agents_number {
