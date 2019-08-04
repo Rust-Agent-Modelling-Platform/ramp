@@ -1,22 +1,30 @@
+#[macro_use]
+extern crate serde_derive;
+
 mod agent;
 mod functions;
 mod container;
 mod action;
+mod settings;
 
 use container::Container;
 use std::collections::HashMap;
 use uuid::Uuid;
 use std::time::{Duration, Instant};
+use config;
+use settings::Settings;
+use config::ConfigError;
 
 use crate::agent::Agent;
 
-const TURN_LIMIT: i32 = 1000;
+fn main() -> Result<(), ConfigError> {
+    let settings = Settings::new()?;
 
-fn main() {
     let now = Instant::now();
+    
+    let mut container = Container::new(&functions::rastrigin, settings.container.agents_number, 4, (-5.12, 5.12), settings.container.max_agents_number);
 
-    let mut container = Container::create(&functions::rastrigin, 500, 4, (-5.12, 5.12), 1000);
-    for turn_number in 1..=TURN_LIMIT {
+    for turn_number in 1..settings.iterations {
         println!{"====================================== TURN {} ======================================", turn_number}
         println!{"==> Action queue at start of the turn: "}
         container.print_action_queue();
@@ -55,32 +63,5 @@ fn main() {
     println!("At end of simulation the best agent is:");
     container.print_most_fit_agent();
 
-//  ======================== 2d vectors and hashmaps ==============================================
-
-
-//    let new_uuid = Uuid::new_v4();
-//    let mut hm = HashMap::new();
-//    hm.insert(new_uuid, Agent::create(vec![1.0, 2.0, 3.0], &functions::rastrigin));
-//    let agent = hm.get_mut(&new_uuid).unwrap();
-//
-//    agent.energy = 90;
-//
-//    println!("{:?}", hm);
-
-
-//    let mut grid = vec![vec![Uuid::new_v4(); 3]; 4];
-//    grid[2][1] = Uuid::new_v4();
-//    for (i, row) in grid.iter().enumerate() {
-//        for (y, col) in row.iter().enumerate() {
-//            print!("{} \t", col);
-//        }
-//        println!();
-//    }
-//
-////    for element in grid.iter_mut().flat_map(|r| r.iter_mut()) {
-////        println!("{}", element);
-////    }
-
-
-
+    Ok(())
 }
