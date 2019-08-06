@@ -22,9 +22,8 @@ fn main() -> Result<(), ConfigError> {
 
     let now = Instant::now();
     
-    let mut container = Container::new(&functions::rastrigin, settings.container.agents_number, 4, (-5.12, 5.12), settings.container.max_agents_number);
-
-    for turn_number in 1..settings.iterations {
+    let mut container = Container::new(&functions::rastrigin, settings.container.agents_number, 50, (-5.12, 5.12), settings.container.max_agents_number);
+    for turn_number in 1..=settings.iterations {
         println!{"====================================== TURN {} ======================================", turn_number}
         println!{"==> Action queue at start of the turn: "}
         container.print_action_queue();
@@ -42,7 +41,7 @@ fn main() -> Result<(), ConfigError> {
         container.resolve_meetings();
 
         println!{"==> Turn is now over. Fitness and energy of the agents at the end of turn {}:", turn_number}
-        container.print_agent_stats();
+        //container.print_agent_stats();
 
         println!{"==> Action queue at the end of {}:", turn_number}
         container.print_action_queue();
@@ -52,6 +51,9 @@ fn main() -> Result<(), ConfigError> {
 
         println!{"==> Removing dead agents"}
         container.remove_dead_agents();
+
+        println!("At end of turn the best agent is:");
+        container.print_most_fit_agent();
 
         container.clear_action_queues();
 

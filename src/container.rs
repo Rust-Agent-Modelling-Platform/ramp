@@ -77,7 +77,7 @@ impl Container {
         //docs claim implementation of sort_by is O(n log(n)) worst-case
         //sorted from lowest to highest fitness, reverse a and b below to get opposite ordering
         self.procreating_ids.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-        println!(" SORTED =============== {:?}", self.procreating_ids);
+        //println!(" SORTED =============== {:?}", self.procreating_ids);
 
         //check hashmap capacity to see how many new agents can be created
         let mut free_places_in_map = self.max_agent_num - self.id_agent_map.keys().len();
@@ -127,7 +127,7 @@ impl Container {
     }
 
     pub fn remove_dead_agents(&mut self) {
-        println!("{:?}", self.dead_ids);
+        //println!("{:?}", self.dead_ids);
         for id in &self.dead_ids {
                 self.id_agent_map.remove(id);
         }
