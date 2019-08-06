@@ -1,0 +1,5 @@
+iterations = 10000
+
+[container]
+agents_number = 500
+max_agents_number = 5000

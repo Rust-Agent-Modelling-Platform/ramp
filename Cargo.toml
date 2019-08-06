@@ -1,0 +1,12 @@
+[package]
+name = "rust-in-peace"
+version = "0.1.0"
+authors = ["Eric Cupiał <eric.cupial@gmail.com>", "Jacek Starz <jacek.starz@gmail.com>", "Michał Śledź <msledz@student.agh.edu.pl>"]
+edition = "2018"
+
+[dependencies]
+rand = "0.7"
+uuid = {version="0.7", features=["v4"]}
+config = "0.9.3"
+serde_derive = "1.0.98"
+serde = "1.0.98"
