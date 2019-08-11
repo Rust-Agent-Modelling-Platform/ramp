@@ -1,14 +1,15 @@
 use config::{Config, ConfigError, File};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Copy, Clone)]
 pub struct Container {
     pub agents_number: u32,
     pub max_agents_number: usize,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Copy, Clone)]
 pub struct Settings {
-    pub iterations: u32,
+    pub turns: u32,
+    pub islands: u32,
     pub container: Container,
 }
 

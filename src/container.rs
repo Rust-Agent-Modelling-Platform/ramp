@@ -1,6 +1,8 @@
+use colored::*;
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::fmt;
+use std::time::Instant;
 use uuid::Uuid;
 
 use crate::action::Action;
@@ -15,6 +17,7 @@ pub struct Container {
     pub action_queue: Vec<Action>,
     pub dim: i32,
     pub interval: (f64, f64),
+    turns: u32,
 
     pub dead_ids: Vec<Uuid>,
     pub meeting_ids: Vec<(Uuid, f64)>,
@@ -29,6 +32,7 @@ impl Container {
         dim: i32,
         interval: (f64, f64),
         max_agent_num: usize,
+        turns: u32,
     ) -> Self {
         let mut id_agent_map: HashMap<Uuid, Agent> = HashMap::with_capacity(max_agent_num);
 
@@ -47,6 +51,7 @@ impl Container {
             action_queue: Vec::new(),
             dim,
             interval,
+            turns,
 
             dead_ids: Vec::new(),
             meeting_ids: Vec::new(),
@@ -68,10 +73,7 @@ impl Container {
     }
 
     pub fn resolve_procreation(&mut self) {
-        println! {"Number of agents that want to procreate this turn: {}", self.procreating_ids.len()}
-        if self.procreating_ids.len() % 2 != 0 {
-            println! {"There is an agent without a pair - gets the None action"}
-        }
+        // println! {"Number of agents that want to procreate this turn: {}", self.procreating_ids.len()}
 
         if self.procreating_ids.is_empty() {
             return;
@@ -88,11 +90,12 @@ impl Container {
         //sorted from lowest to highest fitness, reverse a and b below to get opposite ordering
         self.procreating_ids
             .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        //println!(" SORTED =============== {:?}", self.procreating_ids);
 
         //check hashmap capacity to see how many new agents can be created
         let mut free_places_in_map = self.max_agent_num - self.id_agent_map.keys().len();
         let mut places_required = self.procreating_ids.len() / 2;
-        println!("Free: {}, needed: {}", free_places_in_map, places_required);
+        // println!("Free: {}, needed: {}", free_places_in_map, places_required);
 
         //procreate as many as you can
         while free_places_in_map > 0 && places_required != 0 {
@@ -113,13 +116,12 @@ impl Container {
     }
 
     pub fn resolve_meetings(&mut self) {
-        println! {"Number of agents that want a meeting this turn: {}", self.meeting_ids.len()}
-        if self.meeting_ids.len() % 2 != 0 {
-            println! {"There is an agent without a pair - gets the None action"}
-        }
+        // println! {"Number of agents that want a meeting this turn: {}", self.meeting_ids.len()}
         if self.meeting_ids.is_empty() {
             return;
         }
+
+        //self.meeting_ids.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
         // no pair - just remove him at this moment
         if self.meeting_ids.len() % 2 == 1 {
@@ -147,6 +149,22 @@ impl Container {
         for id in &self.migrating_ids {
             self.id_agent_map.remove(id);
         }
+    }
+
+    pub fn run(&mut self) {
+        let now = Instant::now();
+        for _turn_number in 0..=self.turns {
+            self.remove_migrants();
+            self.create_action_queues();
+            self.resolve_procreation();
+            self.resolve_meetings();
+            self.remove_dead_agents();
+            self.clear_action_queues();
+        }
+        println!("{}", "================= END =================".green());
+        println!("Time elapsed: {} seconds", now.elapsed().as_secs());
+        println!("At end of simulation the best agent is:");
+        self.print_most_fit_agent();
     }
 
     // ================================================ Private methods ====================================================
@@ -179,27 +197,28 @@ impl Container {
     }
 
     // =============================================== Public utility methods =========================================================
-    pub fn print_action_queue(&self) {
-        for action in &self.action_queue {
-            println!("{}", action)
-        }
-        println!("Nr of entries in this queue: {}", self.action_queue.len());
-    }
+    // These print functions will be used in [#27]
+    // pub fn print_action_queue(&self) {
+    //     for action in &self.action_queue {
+    //         println!("{}", action)
+    //     }
+    //     println!("Nr of entries in this queue: {}", self.action_queue.len());
+    // }
 
-    pub fn print_agent_stats(&self) {
-        for agent in self.id_agent_map.values() {
-            println!(
-                "Agent {}: Fitness - {}, energy - {}",
-                &agent.id.to_string()[..5],
-                agent.fitness,
-                agent.energy
-            )
-        }
-    }
+    // pub fn print_agent_stats(&self) {
+    //     for agent in self.id_agent_map.values() {
+    //         println!(
+    //             "Agent {}: Fitness - {}, energy - {}",
+    //             &agent.id.to_string()[..5],
+    //             agent.fitness,
+    //             agent.energy
+    //         )
+    //     }
+    // }
 
-    pub fn print_agent_count(&self) {
-        println!("{}", self.id_agent_map.len());
-    }
+    // pub fn print_agent_count(&self) {
+    //     println!("{}", self.id_agent_map.len());
+    // }
 
     pub fn print_most_fit_agent(&self) {
         let tg = Agent::new_dummy();

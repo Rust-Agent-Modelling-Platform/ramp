@@ -1,5 +1,7 @@
-iterations = 10000
+turns = 1000
+islands = 10
 
 [container]
-agents_number = 500
-max_agents_number = 5000
+agents_number = 50
+max_agents_number = 500
+
