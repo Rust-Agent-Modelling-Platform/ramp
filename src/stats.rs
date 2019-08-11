@@ -4,11 +4,11 @@ use std::fs::File;
 use uuid::Uuid;
 
 use colored::*;
+use std::cell::RefCell;
 use std::io::prelude::*;
 
 use crate::agent::Agent;
 use crate::container::Container;
-use std::cell::RefCell;
 
 // =================================== Info-generating methods =========================================================
 
@@ -150,7 +150,7 @@ pub fn generate_stat_files(container: &Container, time: u64, dir: &str) {
 
     write_time_csv(time, format!("{}/{}", dir, stat_types[0]));
     write_fitness_csv(
-        &container.best_fitness_in_turn,
+        &container.stats.best_fitness_in_turn,
         format!("{}/{}", dir, stat_types[1]),
     );
     write_best_agent_csv(
@@ -158,15 +158,15 @@ pub fn generate_stat_files(container: &Container, time: u64, dir: &str) {
         format!("{}/{}", dir, stat_types[2]),
     );
     write_meetings_csv(
-        &container.meetings_in_turn,
+        &container.stats.meetings_in_turn,
         format!("{}/{}", dir, stat_types[3]),
     );
     write_procreations_csv(
-        &container.procreations_in_turn,
+        &container.stats.procreations_in_turn,
         format!("{}/{}", dir, stat_types[4]),
     );
     write_migrations_csv(
-        &container.migrants_received_in_turn,
+        &container.stats.migrants_received_in_turn,
         format!("{}/{}", dir, stat_types[5]),
     );
 }
