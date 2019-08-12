@@ -14,15 +14,8 @@ variables:
       - cargo/
 
 stages:
-  - compile
   - test
   - lint
-
-compile:
-  <<: *rust_template
-  stage: compile
-  script:
-    - cargo build --all --verbose
 
 test:
   <<: *rust_template
