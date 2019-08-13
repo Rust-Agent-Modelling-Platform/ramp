@@ -1,5 +1,5 @@
 turns = 1000
-islands = 10
+islands = 3
 
 [container]
 agents_number = 50

@@ -23,15 +23,6 @@ impl Agent {
         }
     }
 
-    pub fn new_dummy() -> Agent {
-        Agent {
-            id: Uuid::new_v4(),
-            energy: 100,
-            fitness: f64::NEG_INFINITY,
-            genotype: vec![],
-        }
-    }
-
     pub fn mutate_genotype(genotype: &mut Vec<f64>, interval: (f64, f64)) {
         let mutation_rate = 0.2;
 
@@ -39,8 +30,9 @@ impl Agent {
         let right_bound = interval.1 / 10.0; //  0.512 rastrigin
 
         for gene in genotype.iter_mut() {
-            if thread_rng().gen_range(0.0, 1.0) < mutation_rate {
+            if thread_rng().gen_range(0.0, 1.0) <= mutation_rate {
                 *gene += thread_rng().gen_range(left_bound, right_bound);
+                //return;
             }
         }
     }

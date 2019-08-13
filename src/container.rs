@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::action::Action;
 use crate::agent::Agent;
 use crate::functions;
+use crate::stats;
 
 pub struct Container {
     pub id: Uuid,
@@ -18,21 +19,30 @@ pub struct Container {
     pub dim: i32,
     pub interval: (f64, f64),
     turns: u32,
+    island_stats_dir_path: String,
 
     pub dead_ids: Vec<Uuid>,
     pub meeting_ids: Vec<(Uuid, f64)>,
     pub procreating_ids: Vec<(Uuid, f64)>,
     pub migrating_ids: Vec<Uuid>,
+
+    pub best_fitness_in_turn: Vec<f64>,
+    pub meetings_in_turn: Vec<u32>,
+    pub procreations_in_turn: Vec<u32>,
+    pub migrants_received_in_turn: Vec<u32>,
 }
 
 impl Container {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
+        id: Uuid,
         calculate_fitness: &dyn Fn(&[f64]) -> f64,
         agents_number: u32,
         dim: i32,
         interval: (f64, f64),
         max_agent_num: usize,
         turns: u32,
+        island_stats_dir_path: String,
     ) -> Self {
         let mut id_agent_map: HashMap<Uuid, Agent> = HashMap::with_capacity(max_agent_num);
 
@@ -44,7 +54,7 @@ impl Container {
             id_agent_map.insert(id, Agent::new(id, genotype, calculate_fitness));
         }
         Container {
-            id: Uuid::new_v4(),
+            id,
             id_agent_map,
             max_agent_num,
             turn_number: 0,
@@ -52,11 +62,17 @@ impl Container {
             dim,
             interval,
             turns,
+            island_stats_dir_path,
 
             dead_ids: Vec::new(),
             meeting_ids: Vec::new(),
             procreating_ids: Vec::new(),
             migrating_ids: Vec::new(),
+
+            best_fitness_in_turn: vec![],
+            meetings_in_turn: vec![],
+            procreations_in_turn: vec![],
+            migrants_received_in_turn: vec![],
         }
     }
 
@@ -73,24 +89,24 @@ impl Container {
     }
 
     pub fn resolve_procreation(&mut self) {
+        let mut procreating_num = 0;
         // log::info! {"Number of agents that want to procreate this turn: {}", self.procreating_ids.len()}
 
         if self.procreating_ids.is_empty() {
             return;
         }
 
-        // no pair - just remove him at this moment
-        if self.procreating_ids.len() % 2 == 1 {
-            self.procreating_ids.pop().unwrap();
-        }
-
-        //sort the vector by fitness and procreate
-        //we want the agents to mate in order of fitness
         //docs claim implementation of sort_by is O(n log(n)) worst-case
         //sorted from lowest to highest fitness, reverse a and b below to get opposite ordering
         self.procreating_ids
             .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         //log::info!(" SORTED =============== {:?}", self.procreating_ids);
+
+        // no pair - just remove him at this moment
+        if self.procreating_ids.len() % 2 == 1 {
+            let _none_agent = self.procreating_ids.remove(0);
+            //log::info!("Getting none from procreation is: {}", none_agent.0.to_string());
+        }
 
         //check hashmap capacity to see how many new agents can be created
         let mut free_places_in_map = self.max_agent_num - self.id_agent_map.keys().len();
@@ -104,6 +120,7 @@ impl Container {
             self.procreate(id1.0, id2.0);
             free_places_in_map -= 1;
             places_required -= 1;
+            procreating_num += 1;
         }
 
         //add rest to meeting_ids
@@ -111,27 +128,37 @@ impl Container {
         for (id, fitness) in &self.procreating_ids {
             self.meeting_ids.push((*id, *fitness));
         }
+        //log::info!("Procreation queue at end of resolve_procreation (should be on meeting list): {:?}", self.procreating_ids);
+        //log::info!("Meeting queue at end of resolve_procreation: {:?}", self.meeting_ids);
 
+        self.procreations_in_turn.push(procreating_num);
         self.procreating_ids.clear();
     }
 
     pub fn resolve_meetings(&mut self) {
+        let mut meeting_num = 0;
+
         // log::info! {"Number of agents that want a meeting this turn: {}", self.meeting_ids.len()}
         if self.meeting_ids.is_empty() {
             return;
         }
 
-        //self.meeting_ids.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-
         // no pair - just remove him at this moment
         if self.meeting_ids.len() % 2 == 1 {
-            self.meeting_ids.pop();
+            let _none_agent = self.meeting_ids.remove(0);
+            //log::info!("Getting none from meeting is: {}", none_agent.0.to_string());
         }
+
+        //log::info!("MEETING ================ {:?}", self.meeting_ids);
+
         while !self.meeting_ids.is_empty() {
             let (id1, _) = self.meeting_ids.pop().unwrap();
             let (id2, _) = self.meeting_ids.pop().unwrap();
             self.meet(id1, id2);
+            meeting_num += 1;
         }
+        self.meetings_in_turn.push(meeting_num);
+        self.migrating_ids.clear();
     }
 
     pub fn clear_action_queues(&mut self) {
@@ -139,6 +166,7 @@ impl Container {
     }
 
     pub fn remove_dead_agents(&mut self) {
+        //log::info!("{:?}", self.dead_ids);
         for id in &self.dead_ids {
             self.id_agent_map.remove(id);
         }
@@ -148,23 +176,30 @@ impl Container {
     pub fn remove_migrants(&mut self) {
         for id in &self.migrating_ids {
             self.id_agent_map.remove(id);
+            log::info!("Migrating agent id: {}", id);
         }
+        self.meeting_ids.clear();
     }
 
     pub fn run(&mut self) {
         let now = Instant::now();
-        for _turn_number in 0..=self.turns {
+        for _turn_number in 1..=self.turns {
+            self.remove_dead_agents();
             self.remove_migrants();
+            self.clear_action_queues();
             self.create_action_queues();
             self.resolve_procreation();
             self.resolve_meetings();
-            self.remove_dead_agents();
-            self.clear_action_queues();
+            self.best_fitness_in_turn
+                .push(stats::get_best_fitness(&self));
         }
+        let time = now.elapsed().as_secs();
+        stats::generate_stat_files(&self, time, &self.island_stats_dir_path);
+
         log::info!("{}", "================= END =================".green());
         log::info!("Time elapsed: {} seconds", now.elapsed().as_secs());
         log::info!("At end of simulation the best agent is:");
-        self.print_most_fit_agent();
+        stats::print_best_fitness(&self);
     }
 
     // ================================================ Private methods ====================================================
@@ -191,43 +226,8 @@ impl Container {
         Agent::mutate_genotype(&mut new_genotype, self.interval);
         let uuid = Uuid::new_v4();
         let new_agent = Agent::new(uuid, new_genotype, &functions::rastrigin);
-
+        // log::info!("NEW AGENT {}", new_agent);
         self.id_agent_map.insert(uuid, new_agent);
-    }
-
-    // =============================================== Public utility methods =========================================================
-    // These print functions will be used in [#27]
-    // pub fn print_action_queue(&self) {
-    //     for action in &self.action_queue {
-    //         log::info!("{}", action)
-    //     }
-    //     log::info!("Nr of entries in this queue: {}", self.action_queue.len());
-    // }
-
-    // pub fn print_agent_stats(&self) {
-    //     for agent in self.id_agent_map.values() {
-    //         log::info!(
-    //             "Agent {}: Fitness - {}, energy - {}",
-    //             &agent.id.to_string()[..5],
-    //             agent.fitness,
-    //             agent.energy
-    //         )
-    //     }
-    // }
-
-    // pub fn print_agent_count(&self) {
-    //     log::info!("{}", self.id_agent_map.len());
-    // }
-
-    pub fn print_most_fit_agent(&self) {
-        let tg = Agent::new_dummy();
-        let mut top_guy = &tg;
-        for agent in self.id_agent_map.values() {
-            if agent.fitness > top_guy.fitness {
-                top_guy = agent;
-            }
-        }
-        log::info!("{}", top_guy);
     }
 }
 
