@@ -3,7 +3,6 @@ use config::{Config, ConfigError, File};
 #[derive(Debug, Deserialize, Copy, Clone)]
 pub struct Container {
     pub agents_number: u32,
-    pub max_agents_number: usize,
 }
 
 #[derive(Debug, Deserialize, Copy, Clone)]
@@ -11,6 +10,12 @@ pub struct Settings {
     pub turns: u32,
     pub islands: u32,
     pub container: Container,
+    pub agent: Agent
+}
+
+#[derive(Debug, Deserialize, Copy, Clone)]
+pub struct Agent {
+    pub dims: i32,
 }
 
 impl Settings {

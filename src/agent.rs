@@ -3,6 +3,7 @@ use std::f64;
 use std::fmt;
 use uuid::Uuid;
 
+use crate::constants;
 use crate::action::Action;
 
 #[derive(Debug, Clone)]
@@ -17,20 +18,18 @@ impl Agent {
     pub fn new(id: Uuid, genotype: Vec<f64>, calculate_fitness: &dyn Fn(&[f64]) -> f64) -> Agent {
         Agent {
             id,
-            energy: 100,
+            energy,
             fitness: -calculate_fitness(&genotype),
             genotype,
         }
     }
 
     pub fn mutate_genotype(genotype: &mut Vec<f64>, interval: (f64, f64)) {
-        let mutation_rate = 0.2;
-
         let left_bound = interval.0 / 10.0; // -0.512 rastrigin
         let right_bound = interval.1 / 10.0; //  0.512 rastrigin
 
         for gene in genotype.iter_mut() {
-            if thread_rng().gen_range(0.0, 1.0) <= mutation_rate {
+            if thread_rng().gen_range(0.0, 1.0) <= constants::MUTATION_RATE {
                 *gene += thread_rng().gen_range(left_bound, right_bound);
                 //return;
             }
@@ -55,7 +54,7 @@ impl Agent {
             Action::Migration(self.id)
         } else if self.energy > 0 && self.energy < 90 {
             Action::Meeting(self.id, Uuid::nil())
-        } else if prob > 50 {
+        } else if prob > constants::PROCREATION_PROB {
             Action::Procreation(self.id, Uuid::nil())
         } else {
             Action::Meeting(self.id, Uuid::nil())
