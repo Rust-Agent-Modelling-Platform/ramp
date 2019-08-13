@@ -9,6 +9,7 @@ mod settings;
 
 use config;
 use config::ConfigError;
+use flexi_logger::Logger;
 use settings::Settings;
 use std::thread;
 
@@ -16,6 +17,12 @@ use crate::container::Container;
 
 fn main() -> Result<(), ConfigError> {
     let settings = Settings::new()?;
+
+    Logger::with_str("info")
+        .format_for_stderr(flexi_logger::colored_default_format)
+        .start()
+        .unwrap();
+
     let mut threads = Vec::<thread::JoinHandle<_>>::new();
 
     for _ in 0..settings.islands {
@@ -34,5 +41,6 @@ fn main() -> Result<(), ConfigError> {
     for thread in threads {
         thread.join().unwrap();
     }
+
     Ok(())
 }

@@ -73,7 +73,7 @@ impl Container {
     }
 
     pub fn resolve_procreation(&mut self) {
-        // println! {"Number of agents that want to procreate this turn: {}", self.procreating_ids.len()}
+        // log::info! {"Number of agents that want to procreate this turn: {}", self.procreating_ids.len()}
 
         if self.procreating_ids.is_empty() {
             return;
@@ -90,12 +90,12 @@ impl Container {
         //sorted from lowest to highest fitness, reverse a and b below to get opposite ordering
         self.procreating_ids
             .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-        //println!(" SORTED =============== {:?}", self.procreating_ids);
+        //log::info!(" SORTED =============== {:?}", self.procreating_ids);
 
         //check hashmap capacity to see how many new agents can be created
         let mut free_places_in_map = self.max_agent_num - self.id_agent_map.keys().len();
         let mut places_required = self.procreating_ids.len() / 2;
-        // println!("Free: {}, needed: {}", free_places_in_map, places_required);
+        // log::info!("Free: {}, needed: {}", free_places_in_map, places_required);
 
         //procreate as many as you can
         while free_places_in_map > 0 && places_required != 0 {
@@ -116,7 +116,7 @@ impl Container {
     }
 
     pub fn resolve_meetings(&mut self) {
-        // println! {"Number of agents that want a meeting this turn: {}", self.meeting_ids.len()}
+        // log::info! {"Number of agents that want a meeting this turn: {}", self.meeting_ids.len()}
         if self.meeting_ids.is_empty() {
             return;
         }
@@ -161,9 +161,9 @@ impl Container {
             self.remove_dead_agents();
             self.clear_action_queues();
         }
-        println!("{}", "================= END =================".green());
-        println!("Time elapsed: {} seconds", now.elapsed().as_secs());
-        println!("At end of simulation the best agent is:");
+        log::info!("{}", "================= END =================".green());
+        log::info!("Time elapsed: {} seconds", now.elapsed().as_secs());
+        log::info!("At end of simulation the best agent is:");
         self.print_most_fit_agent();
     }
 
@@ -191,7 +191,6 @@ impl Container {
         Agent::mutate_genotype(&mut new_genotype, self.interval);
         let uuid = Uuid::new_v4();
         let new_agent = Agent::new(uuid, new_genotype, &functions::rastrigin);
-        // println!("NEW AGENT {}", new_agent);
 
         self.id_agent_map.insert(uuid, new_agent);
     }
@@ -200,14 +199,14 @@ impl Container {
     // These print functions will be used in [#27]
     // pub fn print_action_queue(&self) {
     //     for action in &self.action_queue {
-    //         println!("{}", action)
+    //         log::info!("{}", action)
     //     }
-    //     println!("Nr of entries in this queue: {}", self.action_queue.len());
+    //     log::info!("Nr of entries in this queue: {}", self.action_queue.len());
     // }
 
     // pub fn print_agent_stats(&self) {
     //     for agent in self.id_agent_map.values() {
-    //         println!(
+    //         log::info!(
     //             "Agent {}: Fitness - {}, energy - {}",
     //             &agent.id.to_string()[..5],
     //             agent.fitness,
@@ -217,7 +216,7 @@ impl Container {
     // }
 
     // pub fn print_agent_count(&self) {
-    //     println!("{}", self.id_agent_map.len());
+    //     log::info!("{}", self.id_agent_map.len());
     // }
 
     pub fn print_most_fit_agent(&self) {
@@ -228,7 +227,7 @@ impl Container {
                 top_guy = agent;
             }
         }
-        println!("{}", top_guy);
+        log::info!("{}", top_guy);
     }
 }
 
