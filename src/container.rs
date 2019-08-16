@@ -4,9 +4,10 @@ use std::collections::HashMap;
 use std::fmt;
 use std::time::Instant;
 use uuid::Uuid;
+use std::sync::Arc;
 
 use crate::action::Action;
-use crate::agent::Agent;
+use crate::agent::{Agent, AgentConfig};
 use crate::functions;
 use crate::stats;
 
@@ -15,9 +16,9 @@ pub struct Container {
     pub id_agent_map: HashMap<Uuid, Agent>,
     pub turn_number: u64,
     pub action_queue: Vec<Action>,
-    pub dim: i32,
     pub interval: (f64, f64),
     turns: u32,
+    pub agent_config: Arc<AgentConfig>,
     island_stats_dir_path: String,
 
     pub dead_ids: Vec<Uuid>,
@@ -37,28 +38,29 @@ impl Container {
         id: Uuid,
         calculate_fitness: &dyn Fn(&[f64]) -> f64,
         agents_number: u32,
-        dim: i32,
         interval: (f64, f64),
         turns: u32,
+        agent_config: Arc<AgentConfig>,
         island_stats_dir_path: String,
+
     ) -> Self {
         let mut id_agent_map: HashMap<Uuid, Agent> = HashMap::new();
 
         for _i in 0..agents_number {
-            let genotype: Vec<f64> = (0..dim)
+            let genotype: Vec<f64> = (0..agent_config.genotype_dim)
                 .map(|_| thread_rng().gen_range(interval.0, interval.1))
                 .collect();
             let id = Uuid::new_v4();
-            id_agent_map.insert(id, Agent::new(id, genotype, calculate_fitness, 100));
+            id_agent_map.insert(id, Agent::new(id, agent_config.clone(), genotype, calculate_fitness, 100));
         }
         Container {
             id,
             id_agent_map,
             turn_number: 0,
             action_queue: Vec::new(),
-            dim,
             interval,
             turns,
+            agent_config,
             island_stats_dir_path,
 
             dead_ids: Vec::new(),
@@ -230,9 +232,9 @@ impl Container {
             &self.id_agent_map[&id1].genotype,
             &self.id_agent_map[&id2].genotype,
         );
-        Agent::mutate_genotype(&mut new_genotype, self.interval);
+        Agent::mutate_genotype(&self.agent_config, &mut new_genotype, self.interval);
         let uuid = Uuid::new_v4();
-        let new_agent = Agent::new(uuid, new_genotype, &functions::rastrigin, child_energy);
+        let new_agent = Agent::new(uuid, self.agent_config.clone(), new_genotype, &functions::rastrigin, child_energy);
         self.id_agent_map.insert(uuid, new_agent);
     }
 }

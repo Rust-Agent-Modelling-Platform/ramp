@@ -15,7 +15,12 @@ pub struct Settings {
 
 #[derive(Debug, Deserialize, Copy, Clone)]
 pub struct Agent {
-    pub dims: i32,
+    pub genotype_dim: i32,
+    pub mutation_rate: f64,
+    pub minimum: bool,
+    pub procreation_prob: i32,
+    pub procreation_penalty: f64,
+    pub meeting_penalty: i32
 }
 
 impl Settings {
