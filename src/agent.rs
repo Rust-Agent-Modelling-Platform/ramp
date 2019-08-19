@@ -14,7 +14,7 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new(id: Uuid, genotype: Vec<f64>, calculate_fitness: &Fn(&[f64]) -> f64) -> Agent {
+    pub fn new(id: Uuid, genotype: Vec<f64>, calculate_fitness: &dyn Fn(&[f64]) -> f64) -> Agent {
         Agent {
             id,
             energy: 100,

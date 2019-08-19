@@ -90,7 +90,7 @@ pub fn create_simulation_dir(root_dir_path: &str) -> String {
     let (_, year) = now.year_ce();
 
     let simulation_dir_name = format!(
-        "{}-{:0>2}-{:0>2}_{:0>2}:{:0>2}:{:0>2}",
+        "{}-{:0>2}-{:0>2}_{:0>2}{:0>2}{:0>2}",
         year.to_string(),
         now.month().to_string(),
         now.day().to_string(),
