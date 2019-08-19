@@ -8,7 +8,6 @@ use std::io::prelude::*;
 
 use crate::agent::Agent;
 use crate::container::Container;
-use std::borrow::{Borrow, BorrowMut};
 use std::cell::RefCell;
 
 // =================================== Info-generating methods =========================================================
@@ -55,18 +54,26 @@ use std::cell::RefCell;
 //    println!("{}", container.id_agent_map.len());
 //}
 
-pub fn get_best_fitness(container: &Container) -> f64 {
-    let mut top_guy = container.id_agent_map.values().take(1).last().unwrap();
+pub fn get_best_fitness(container: &Container) -> Option<f64> {
+    let mut top_guy = match container.id_agent_map.values().take(1).last() {
+        Some(a) => a,
+        None => return None,
+    };
     for agent in container.id_agent_map.values() {
         if agent.borrow().fitness > top_guy.borrow().fitness {
             top_guy = agent;
         }
     }
-    top_guy.borrow().fitness
+    Some(top_guy.borrow().fitness)
 }
 
 pub fn print_best_fitness(container: &Container) {
-    let mut top_guy = container.id_agent_map.values().take(1).last().unwrap();
+    let mut top_guy = container
+        .id_agent_map
+        .values()
+        .take(1)
+        .last()
+        .expect("No more agents in system");
     for agent in container.id_agent_map.values() {
         if agent.borrow().fitness > top_guy.borrow().fitness {
             top_guy = agent;

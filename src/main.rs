@@ -12,13 +12,11 @@ use config;
 use config::ConfigError;
 use flexi_logger::Logger;
 use settings::Settings;
+use std::sync::Arc;
 use std::thread;
 use uuid::Uuid;
-use std::sync::Arc;
-use std::mem;
 
 use crate::container::Container;
-use crate::agent::AgentConfig;
 
 fn main() -> Result<(), ConfigError> {
     let settings = Settings::new()?;
@@ -30,29 +28,20 @@ fn main() -> Result<(), ConfigError> {
     let simulation_dir_path = stats::create_simulation_dir(constants::STATS_DIR_NAME);
     stats::copy_simulation_settings(&simulation_dir_path);
 
-    let agent_config = Arc::new(AgentConfig {
-        genotype_dim: settings.agent.genotype_dim,
-        minimum: settings.agent.minimum,
-        mutation_rate: settings.agent.mutation_rate,
-        procreation_prob: settings.agent.procreation_prob,
-        procreation_penalty: settings.agent.procreation_penalty,
-        meeting_penalty: settings.agent.meeting_penalty,
-        lower_bound: settings.agent.lower_bound,
-        upper_bound: settings.agent.upper_bound
-    });
+    let agent_config = Arc::new(settings.agent_config);
 
     let mut threads = Vec::<thread::JoinHandle<_>>::new();
     for _ in 0..settings.islands {
         let container_id = Uuid::new_v4();
-        let island_stats_dir_path = stats::create_island_stats_dir(&simulation_dir_path, &container_id);
+        let island_stats_dir_path =
+            stats::create_island_stats_dir(&simulation_dir_path, &container_id);
         let mut container = Container::new(
             container_id,
             &functions::rastrigin,
             settings.container.agents_number,
-            (settings.agent.lower_bound, settings.agent.upper_bound),
             settings.turns,
             agent_config.clone(),
-            island_stats_dir_path
+            island_stats_dir_path,
         );
         threads.push(thread::spawn(move || {
             container.run();

@@ -1,11 +1,12 @@
-turns = 1000
+turns = 100
 islands = 1
 
 [container]
 agents_number = 50
 
-[agent]
+[agent_config]
 minimum = true
+initial_energy = 100
 genotype_dim = 50
 mutation_rate = 0.01
 procreation_penalty = 0.5

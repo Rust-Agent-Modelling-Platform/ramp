@@ -1,24 +1,23 @@
 use colored::*;
 use rand::{thread_rng, Rng};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
-use std::sync::Arc;
-use std::cell::RefCell;
 
 use crate::action::Action;
-use crate::agent::{Agent, AgentConfig};
-use crate::functions;
+use crate::agent::Agent;
+use crate::settings::AgentConfig;
 use crate::stats;
-use std::borrow::Borrow;
+use std::process;
 
 pub struct Container {
     pub id: Uuid,
-    pub id_agent_map: HashMap< Uuid, RefCell<Agent> >,
+    pub id_agent_map: HashMap<Uuid, RefCell<Agent>>,
     pub turn_number: u64,
     pub action_queue: Vec<Action>,
-    pub interval: (f64, f64),
     turns: u32,
     pub agent_config: Arc<AgentConfig>,
     island_stats_dir_path: String,
@@ -40,27 +39,33 @@ impl Container {
         id: Uuid,
         calculate_fitness: &dyn Fn(&[f64]) -> f64,
         agents_number: u32,
-        interval: (f64, f64),
         turns: u32,
         agent_config: Arc<AgentConfig>,
         island_stats_dir_path: String,
-
     ) -> Self {
         let mut id_agent_map: HashMap<Uuid, RefCell<Agent>> = HashMap::new();
 
         for _i in 0..agents_number {
             let genotype: Vec<f64> = (0..agent_config.genotype_dim)
-                .map(|_| thread_rng().gen_range(interval.0, interval.1))
+                .map(|_| thread_rng().gen_range(agent_config.lower_bound, agent_config.upper_bound))
                 .collect();
             let id = Uuid::new_v4();
-            id_agent_map.insert(id, Agent::new(id, agent_config.clone(), genotype, calculate_fitness, 100));
+            id_agent_map.insert(
+                id,
+                Agent::new(
+                    id,
+                    agent_config.clone(),
+                    genotype,
+                    calculate_fitness,
+                    agent_config.initial_energy,
+                ),
+            );
         }
         Container {
             id,
             id_agent_map,
             turn_number: 0,
             action_queue: Vec::new(),
-            interval,
             turns,
             agent_config,
             island_stats_dir_path,
@@ -83,7 +88,9 @@ impl Container {
             match action {
                 Action::Death(id) => self.dead_ids.push(id),
                 Action::Meeting(id, _) => self.meeting_ids.push((id, agent.borrow().fitness)),
-                Action::Procreation(id, _) => self.procreating_ids.push((id, agent.borrow().fitness)),
+                Action::Procreation(id, _) => {
+                    self.procreating_ids.push((id, agent.borrow().fitness))
+                }
                 Action::Migration(id) => self.migrating_ids.push(id),
             }
         }
@@ -200,15 +207,24 @@ impl Container {
             self.resolve_procreation();
             self.resolve_meetings();
 
-            let best_agent_in_turn = stats::get_best_fitness(&self);
-            self.best_fitness_in_turn.push(best_agent_in_turn);
+            let best_fitness_in_turn = match stats::get_best_fitness(&self) {
+                Some(fitness) => fitness,
+                None => {
+                    eprintln!(
+                        "{}",
+                        "Error: No more agents in system. Check input parameters".red()
+                    );
+                    process::exit(1)
+                }
+            };
+            self.best_fitness_in_turn.push(best_fitness_in_turn);
             log::info!(
                 "Number of agents in system at end of turn (including those who are now dead): {}",
                 self.id_agent_map.len()
             );
             log::info!(
                 "Best agent this turn: {}",
-                best_agent_in_turn.to_string().blue()
+                best_fitness_in_turn.to_string().blue()
             );
         }
         let time = now.elapsed().as_secs();

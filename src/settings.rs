@@ -10,19 +10,20 @@ pub struct Settings {
     pub turns: u32,
     pub islands: u32,
     pub container: Container,
-    pub agent: Agent
+    pub agent_config: AgentConfig,
 }
 
 #[derive(Debug, Deserialize, Copy, Clone)]
-pub struct Agent {
+pub struct AgentConfig {
     pub genotype_dim: i32,
-    pub mutation_rate: f64,
+    pub initial_energy: i32,
     pub minimum: bool,
+    pub mutation_rate: f64,
     pub procreation_prob: i32,
     pub procreation_penalty: f64,
     pub meeting_penalty: i32,
     pub lower_bound: f64,
-    pub upper_bound: f64
+    pub upper_bound: f64,
 }
 
 impl Settings {
