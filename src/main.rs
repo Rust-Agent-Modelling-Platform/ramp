@@ -36,7 +36,9 @@ fn main() -> Result<(), ConfigError> {
         mutation_rate: settings.agent.mutation_rate,
         procreation_prob: settings.agent.procreation_prob,
         procreation_penalty: settings.agent.procreation_penalty,
-        meeting_penalty: settings.agent.meeting_penalty
+        meeting_penalty: settings.agent.meeting_penalty,
+        lower_bound: settings.agent.lower_bound,
+        upper_bound: settings.agent.upper_bound
     });
 
     let mut threads = Vec::<thread::JoinHandle<_>>::new();
@@ -47,7 +49,7 @@ fn main() -> Result<(), ConfigError> {
             container_id,
             &functions::rastrigin,
             settings.container.agents_number,
-            (-5.12, 5.12),
+            (settings.agent.lower_bound, settings.agent.upper_bound),
             settings.turns,
             agent_config.clone(),
             island_stats_dir_path

@@ -4,8 +4,10 @@ use std::fmt;
 use uuid::Uuid;
 use std::sync::Arc;
 
-use crate::constants;
+use crate::{constants, functions};
 use crate::action::Action;
+use std::cell::{RefCell, RefMut};
+use std::borrow::BorrowMut;
 
 #[derive(Debug, Clone)]
 pub struct AgentConfig {
@@ -15,6 +17,8 @@ pub struct AgentConfig {
     pub procreation_prob: i32,
     pub procreation_penalty: f64,
     pub meeting_penalty: i32,
+    pub lower_bound: f64,
+    pub upper_bound: f64
 }
 
 #[derive(Debug, Clone)]
@@ -33,25 +37,57 @@ impl Agent {
         genotype: Vec<f64>,
         calculate_fitness: &Fn(&[f64]) -> f64,
         energy: i32,
-    ) -> Agent {
+    ) -> RefCell<Agent> {
         let function;
         if config.minimum {
             function = -calculate_fitness(&genotype);
         } else {
             function = calculate_fitness(&genotype);
         }
-        Agent {
+        RefCell::new(Agent {
             id,
             config,
             energy,
             fitness: function,
             genotype,
+        })
+    }
+
+    pub fn procreate(&mut self, partner: &mut Agent) -> (Uuid, RefCell<Agent>) {
+
+        let penalty = self.config.procreation_penalty;
+        let child_energy = (self.energy as f64 * (1.0-penalty) + partner.energy as f64 * (1.0-penalty)).floor() as i32;
+
+        self.energy = (self.energy as f64 * (1.0-penalty)).floor() as i32;
+        partner.energy = (partner.energy as f64 * (1.0-penalty)).floor() as i32;
+
+        let mut new_genotype = Agent::crossover(
+            &self.genotype,
+            &partner.genotype,
+        );
+        Agent::mutate_genotype(&self.config, &mut new_genotype);
+
+        let uuid = Uuid::new_v4();
+        let new_agent = Agent::new(uuid, self.config.clone(), new_genotype, &functions::rastrigin, child_energy);
+        (uuid, new_agent)
+    }
+
+    pub fn meet(&mut self, partner: &mut Agent) {
+        let penalty = &self.config.meeting_penalty;
+
+        if self.fitness > partner.fitness
+        {
+            self.energy += *penalty;
+            partner.energy -= *penalty;
+        } else {
+            partner.energy += *penalty;
+            self.energy -= *penalty;
         }
     }
 
-    pub fn mutate_genotype(config: &AgentConfig, genotype: &mut Vec<f64>, interval: (f64, f64)) {
-        let left_bound = interval.0 / 10.0; // -0.512 rastrigin
-        let right_bound = interval.1 / 10.0; //  0.512 rastrigin
+    pub fn mutate_genotype(config: &AgentConfig, genotype: &mut Vec<f64>) {
+        let left_bound = config.lower_bound / 10.0; // -0.512 rastrigin
+        let right_bound = config.upper_bound / 10.0; //  0.512 rastrigin
 
         for gene in genotype.iter_mut() {
             if thread_rng().gen_range(0.0, 1.0) <= config.mutation_rate {

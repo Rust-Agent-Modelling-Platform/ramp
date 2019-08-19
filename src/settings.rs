@@ -20,7 +20,9 @@ pub struct Agent {
     pub minimum: bool,
     pub procreation_prob: i32,
     pub procreation_penalty: f64,
-    pub meeting_penalty: i32
+    pub meeting_penalty: i32,
+    pub lower_bound: f64,
+    pub upper_bound: f64
 }
 
 impl Settings {

@@ -5,15 +5,17 @@ use std::fmt;
 use std::time::Instant;
 use uuid::Uuid;
 use std::sync::Arc;
+use std::cell::RefCell;
 
 use crate::action::Action;
 use crate::agent::{Agent, AgentConfig};
 use crate::functions;
 use crate::stats;
+use std::borrow::Borrow;
 
 pub struct Container {
     pub id: Uuid,
-    pub id_agent_map: HashMap<Uuid, Agent>,
+    pub id_agent_map: HashMap< Uuid, RefCell<Agent> >,
     pub turn_number: u64,
     pub action_queue: Vec<Action>,
     pub interval: (f64, f64),
@@ -44,7 +46,7 @@ impl Container {
         island_stats_dir_path: String,
 
     ) -> Self {
-        let mut id_agent_map: HashMap<Uuid, Agent> = HashMap::new();
+        let mut id_agent_map: HashMap<Uuid, RefCell<Agent>> = HashMap::new();
 
         for _i in 0..agents_number {
             let genotype: Vec<f64> = (0..agent_config.genotype_dim)
@@ -77,11 +79,11 @@ impl Container {
 
     pub fn create_action_queues(&mut self) {
         for agent in self.id_agent_map.values() {
-            let action = agent.get_action();
+            let action = agent.borrow().get_action();
             match action {
                 Action::Death(id) => self.dead_ids.push(id),
-                Action::Meeting(id, _) => self.meeting_ids.push((id, agent.fitness)),
-                Action::Procreation(id, _) => self.procreating_ids.push((id, agent.fitness)),
+                Action::Meeting(id, _) => self.meeting_ids.push((id, agent.borrow().fitness)),
+                Action::Procreation(id, _) => self.procreating_ids.push((id, agent.borrow().fitness)),
                 Action::Migration(id) => self.migrating_ids.push(id),
             }
         }
@@ -98,16 +100,25 @@ impl Container {
             self.procreating_ids.len(),
             self.procreating_ids.len() / 2
         );
-        // no pair - just remove him at this moment
+
+        // TODO: handle this guy properly
         if self.procreating_ids.len() % 2 == 1 {
             let _none_agent = self.procreating_ids.remove(0);
-            //log::info!("Getting none from procreation is: {}", none_agent.0.to_string());
         }
 
         while !self.procreating_ids.is_empty() {
-            let id1 = self.procreating_ids.pop().unwrap();
-            let id2 = self.procreating_ids.pop().unwrap();
-            self.procreate(id1.0, id2.0);
+            let (id1, _) = self.procreating_ids.pop().unwrap();
+            let (id2, _) = self.procreating_ids.pop().unwrap();
+
+            let mut agent1 = self.id_agent_map.get(&id1).unwrap().borrow_mut();
+            let mut agent2 = self.id_agent_map.get(&id2).unwrap().borrow_mut();
+
+            let (uuid, new_agent) = agent1.procreate(&mut agent2);
+            drop(agent1);
+            drop(agent2);
+
+            self.id_agent_map.insert(uuid, new_agent);
+
             procreating_num += 1;
         }
 
@@ -129,16 +140,20 @@ impl Container {
             "Number of agents that want a meeting this turn: {}",
             self.meeting_ids.len()
         );
-        // no pair - just remove him at this moment
+        // TODO: handle this guy
         if self.meeting_ids.len() % 2 == 1 {
             let _none_agent = self.meeting_ids.remove(0);
-            //log::info!("Getting none from meeting is: {}", none_agent.0.to_string());
         }
 
         while !self.meeting_ids.is_empty() {
             let (id1, _) = self.meeting_ids.pop().unwrap();
             let (id2, _) = self.meeting_ids.pop().unwrap();
-            self.meet(id1, id2);
+
+            let mut agent1 = self.id_agent_map.get(&id1).unwrap().borrow_mut();
+            let mut agent2 = self.id_agent_map.get(&id2).unwrap().borrow_mut();
+
+            agent1.meet(&mut agent2);
+
             meeting_num += 1;
         }
         self.meetings_in_turn.push(meeting_num);
@@ -203,39 +218,6 @@ impl Container {
         log::info!("Time elapsed: {} seconds", now.elapsed().as_secs());
         log::info!("At end of simulation the best agent is:");
         stats::print_best_fitness(&self);
-    }
-
-    // ================================================ Private methods ====================================================
-    fn meet(&mut self, id1: Uuid, id2: Uuid) {
-        if self.id_agent_map.get_mut(&id1).unwrap().fitness
-            > self.id_agent_map.get_mut(&id2).unwrap().fitness
-        {
-            self.id_agent_map.get_mut(&id1).unwrap().energy += 50;
-            self.id_agent_map.get_mut(&id2).unwrap().energy -= 50;
-        } else {
-            self.id_agent_map.get_mut(&id2).unwrap().energy += 50;
-            self.id_agent_map.get_mut(&id1).unwrap().energy -= 50;
-        }
-    }
-
-    fn procreate(&mut self, id1: Uuid, id2: Uuid) {
-        let child_energy = self.id_agent_map.get_mut(&id1).unwrap().energy / 2
-            + self.id_agent_map.get_mut(&id2).unwrap().energy / 2;
-
-
-        self.id_agent_map.get_mut(&id1).unwrap().energy =
-            self.id_agent_map.get_mut(&id1).unwrap().energy / 2;
-        self.id_agent_map.get_mut(&id2).unwrap().energy =
-            self.id_agent_map.get_mut(&id2).unwrap().energy / 2;
-
-        let mut new_genotype = Agent::crossover(
-            &self.id_agent_map[&id1].genotype,
-            &self.id_agent_map[&id2].genotype,
-        );
-        Agent::mutate_genotype(&self.agent_config, &mut new_genotype, self.interval);
-        let uuid = Uuid::new_v4();
-        let new_agent = Agent::new(uuid, self.agent_config.clone(), new_genotype, &functions::rastrigin, child_energy);
-        self.id_agent_map.insert(uuid, new_agent);
     }
 }
 

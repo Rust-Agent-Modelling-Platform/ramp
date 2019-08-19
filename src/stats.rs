@@ -8,6 +8,8 @@ use std::io::prelude::*;
 
 use crate::agent::Agent;
 use crate::container::Container;
+use std::borrow::{Borrow, BorrowMut};
+use std::cell::RefCell;
 
 // =================================== Info-generating methods =========================================================
 
@@ -56,31 +58,31 @@ use crate::container::Container;
 pub fn get_best_fitness(container: &Container) -> f64 {
     let mut top_guy = container.id_agent_map.values().take(1).last().unwrap();
     for agent in container.id_agent_map.values() {
-        if agent.fitness > top_guy.fitness {
+        if agent.borrow().fitness > top_guy.borrow().fitness {
             top_guy = agent;
         }
     }
-    top_guy.fitness
+    top_guy.borrow().fitness
 }
 
 pub fn print_best_fitness(container: &Container) {
     let mut top_guy = container.id_agent_map.values().take(1).last().unwrap();
     for agent in container.id_agent_map.values() {
-        if agent.fitness > top_guy.fitness {
+        if agent.borrow().fitness > top_guy.borrow().fitness {
             top_guy = agent;
         }
     }
-    log::info!("{}", top_guy.fitness.to_string().blue());
+    log::info!("{}", top_guy.borrow().fitness.to_string().blue());
 }
 
-pub fn get_most_fit_agent(container: &Container) -> &Agent {
+pub fn get_most_fit_agent(container: &Container) -> &RefCell<Agent> {
     let mut top_guy = container.id_agent_map.values().take(1).last().unwrap();
     for agent in container.id_agent_map.values() {
-        if agent.fitness > top_guy.fitness {
+        if agent.borrow().fitness > top_guy.borrow().fitness {
             top_guy = agent;
         }
     }
-    top_guy
+    &top_guy
 }
 
 // =================================== Stat files =========================================================
@@ -145,7 +147,7 @@ pub fn generate_stat_files(container: &Container, time: u64, dir: &str) {
         format!("{}/{}", dir, stat_types[1]),
     );
     write_best_agent_csv(
-        get_most_fit_agent(container),
+        &get_most_fit_agent(container).borrow_mut(),
         format!("{}/{}", dir, stat_types[2]),
     );
     write_meetings_csv(
