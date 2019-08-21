@@ -38,56 +38,19 @@ fn main() -> Result<(), ConfigError> {
 
     stats::copy_simulation_settings(&simulation_dir_path);
 
-    match settings.islands {
-        1 => create_without_designated_island(
-            settings,
-            agent_config,
-            txes,
-            rxes,
-            island_ids,
-            simulation_dir_path,
-        ),
-        x if x > 1 => create_with_designated_island(
-            settings,
-            agent_config,
-            txes,
-            rxes,
-            island_ids,
-            simulation_dir_path,
-        ),
-        _ => log::error!("Improper number of islands"),
-    }
+    start_simulation(
+        settings,
+        agent_config,
+        txes,
+        rxes,
+        island_ids,
+        simulation_dir_path,
+    );
 
     Ok(())
 }
 
-fn create_without_designated_island(
-    settings: Settings,
-    agent_config: Arc<AgentConfig>,
-    txes: Vec<Sender<Message>>,
-    mut rxes: Vec<Receiver<Message>>,
-    island_ids: Vec<Uuid>,
-    simulation_dir_path: String,
-) {
-    let island_stats_dir_path =
-        stats::create_island_stats_dir(&simulation_dir_path, &island_ids[0]);
-    let address_book = create_address_book(&txes, &mut rxes, &island_ids, 0);
-    let mut container = Container::new(
-        island_ids[0],
-        address_book,
-        &functions::rastrigin,
-        settings.container.agents_number,
-        settings.turns,
-        agent_config.clone(),
-        island_stats_dir_path,
-    );
-    let handler = thread::spawn(move || {
-        container.run();
-    });
-    handler.join().unwrap();
-}
-
-fn create_with_designated_island(
+fn start_simulation(
     settings: Settings,
     agent_config: Arc<AgentConfig>,
     txes: Vec<Sender<Message>>,
@@ -96,22 +59,7 @@ fn create_with_designated_island(
     simulation_dir_path: String,
 ) {
     let mut threads = Vec::<thread::JoinHandle<_>>::new();
-    let island_stats_dir_path =
-        stats::create_island_stats_dir(&simulation_dir_path, &island_ids[0]);
-    let address_book = create_address_book(&txes, &mut rxes, &island_ids, 0);
-    let mut designated_island = Container::new_without_agents(
-        island_ids[0],
-        address_book,
-        settings.turns,
-        agent_config.clone(),
-        island_stats_dir_path,
-    );
-
-    threads.push(thread::spawn(move || {
-        designated_island.run();
-    }));
-
-    for island_no in 1..settings.islands {
+    for island_no in 0..settings.islands {
         let island_stats_dir_path =
             stats::create_island_stats_dir(&simulation_dir_path, &island_ids[island_no as usize]);
         let address_book = create_address_book(&txes, &mut rxes, &island_ids, island_no as usize);
@@ -163,16 +111,16 @@ fn create_island_ids(islands_number: u32) -> Vec<Uuid> {
 fn create_address_book(
     txes: &[Sender<Message>],
     rxes: &mut Vec<Receiver<Message>>,
-    island_ids: &Vec<Uuid>,
+    island_ids: &[Uuid],
     island_no: usize,
 ) -> AddressBook {
     let mut addresses: HashMap<Uuid, (Sender<Message>, bool)> = HashMap::new();
 
-    for (i, tx) in txes.iter().enumerate().take((txes.len() - 1) + 1) {
+    for (i, tx) in txes.iter().enumerate().take(txes.len()) {
         if i != island_no {
-            addresses.insert(island_ids[i].clone(), (mpsc::Sender::clone(tx), true));
+            addresses.insert(island_ids[i], (mpsc::Sender::clone(tx), true));
         }
     }
     let rx = rxes.remove(0);
-    AddressBook::new(addresses, rx, island_ids[0])
+    AddressBook::new(addresses, rx)
 }
