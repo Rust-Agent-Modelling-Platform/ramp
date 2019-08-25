@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::process;
-use std::sync::Arc;
+use std::sync::{Arc, Barrier};
 use std::time::Instant;
 
 use colored::*;
@@ -65,6 +65,7 @@ pub struct Island {
     island_stats_dir_path: String,
     address_book: AddressBook,
     id_queues: IdQueues,
+    islands_sync: Option<Arc<Barrier>>,
 }
 
 impl Island {
@@ -77,6 +78,7 @@ impl Island {
         turns: u32,
         agent_config: Arc<AgentConfig>,
         island_stats_dir_path: String,
+        islands_sync: Option<Arc<Barrier>>,
     ) -> Self {
         Island {
             id,
@@ -93,6 +95,7 @@ impl Island {
             address_book,
             id_queues: IdQueues::new(),
             stats: Stats::new(),
+            islands_sync,
         }
     }
 
@@ -110,6 +113,10 @@ impl Island {
             self.resolve_deads();
 
             self.log_turn_end_and_update_best_agent();
+
+            if let Some(islands_sync) = &self.islands_sync {
+                islands_sync.wait();
+            };
         }
         self.finish(start_time);
     }
@@ -241,25 +248,22 @@ impl Island {
                         .send_to_rnd(Message::Agent(agent.into_inner()))
                     {
                         Ok(()) => (),
-                        Err(e) => {
-                            match e.0 {
-                                Message::Agent(agent) => {
-                                    self.id_agent_map.insert(*id, RefCell::new(agent));
-                                }
-                                _ => log::info!("Bad return message"),
+                        Err(e) => match e.0 {
+                            Message::Agent(agent) => {
+                                self.id_agent_map.insert(*id, RefCell::new(agent));
                             }
-                        }
+                            _ => log::info!("Bad return message"),
+                        },
                     },
                     None => log::info!("No agent with id {}", id),
                 }
             } else {
                 match self.id_agent_map.remove(id) {
-                    Some(agent) => {
-                        self.address_book
-                            .pub_rx
-                            .send(Message::Agent(agent.into_inner()))
-                            .unwrap()
-                    }
+                    Some(agent) => self
+                        .address_book
+                        .pub_rx
+                        .send(Message::Agent(agent.into_inner()))
+                        .unwrap(),
                     None => log::warn!("No id in agent map, id: {}", id),
                 }
             }

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Barrier};
 use std::{env, thread};
 
 use config;
@@ -27,8 +27,8 @@ mod action;
 mod address_book;
 mod agent;
 mod constants;
-mod island;
 mod functions;
+mod island;
 mod message;
 mod settings;
 mod stats;
@@ -196,8 +196,15 @@ fn start_simulation(
     ips: Vec<(IpAddr, Port)>,
 ) {
     let mut threads = Vec::<thread::JoinHandle<_>>::new();
+
     let (sub_tx, sub_rx) = mpsc::channel();
     let (pub_tx, pub_rx) = mpsc::channel();
+
+    let islands_sync = if settings.islands_sync {
+        Some(Arc::new(Barrier::new(settings.islands as usize)))
+    } else {
+        None
+    };
 
     for island_no in 0..settings.islands {
         let island_stats_dir_path =
@@ -219,6 +226,7 @@ fn start_simulation(
             settings.turns,
             agent_config.clone(),
             island_stats_dir_path,
+            islands_sync.clone(),
         );
 
         threads.push(thread::spawn(move || {

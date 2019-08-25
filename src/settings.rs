@@ -6,6 +6,7 @@ pub struct Settings {
     pub islands: u32,
     pub network: Network,
     pub island: Island,
+    pub islands_sync: bool,
     pub agent_config: AgentConfig,
 }
 
