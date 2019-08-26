@@ -9,7 +9,7 @@ use crate::functions;
 use crate::settings::AgentConfig;
 use std::cell::RefCell;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Agent {
     pub id: Uuid,
     pub config: Arc<AgentConfig>,

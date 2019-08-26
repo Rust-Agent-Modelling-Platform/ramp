@@ -13,7 +13,7 @@ pub struct Settings {
     pub agent_config: AgentConfig,
 }
 
-#[derive(Debug, Deserialize, Copy, Clone)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub struct AgentConfig {
     pub genotype_dim: i32,
     pub initial_energy: i32,

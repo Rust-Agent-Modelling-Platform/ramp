@@ -150,7 +150,8 @@ fn main() -> Result<(), ConfigError> {
         rxes,
         island_ids,
         simulation_dir_path,
-        subscriber
+        subscriber,
+        publisher
     );
 
     log::debug!("5/5 Enter polling loop, receive agents and send them to worker threads");
@@ -167,6 +168,7 @@ fn start_simulation(
     island_ids: Vec<Uuid>,
     simulation_dir_path: String,
     subscriber: Socket,
+    publisher: Socket
 ) {
     let mut threads = Vec::<thread::JoinHandle<_>>::new();
 
@@ -207,7 +209,14 @@ fn start_simulation(
             match agent {
                 Message::Agent(migrant) => {
                     migrants_num += 1;
-                    println!(">>>>>>>>>>>>>>>>>>>>>>>GOT HERE<<<<<<<<<<<<<<  {}", migrants_num);
+                    println!("Migrant count:  {}", migrants_num);
+                    let encoded: Vec<u8> = bincode::serialize(&migrant).unwrap();
+                    publisher
+                        .send("B", zmq::SNDMORE)
+                        .expect("failed sending first envelope");
+                    publisher
+                        .send(encoded, 0)
+                        .expect("failed sending first message");
 
                 },
                 _ => println!("MEANS END")
@@ -215,16 +224,15 @@ fn start_simulation(
         }
 
 
+        println!("Also got here");
+        //2. Check if anybody wants to migrate to this node - check the sub socket
+        let mut items = [subscriber.as_poll_item(zmq::POLLIN)];
+        zmq::poll(&mut items, -1).unwrap();
 
-//        println!("Also got here");
-//        //2. Check if anybody wants to migrate to this node - check the sub socket
-//        let mut items = [subscriber.as_poll_item(zmq::POLLIN)];
-//        zmq::poll(&mut items, -1).unwrap();
-//
-//        if items[0].is_readable() {
-//            let message = subscriber.recv_msg(0).unwrap();
-//            //send agent to a thread
-//        }
+        if items[0].is_readable() {
+            let message = subscriber.recv_msg(0).unwrap();
+            //send agent to a thread
+        }
     }
 
 
