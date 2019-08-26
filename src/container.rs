@@ -222,6 +222,11 @@ impl Container {
         self.stats.meetings_in_turn.push(meeting_num);
     }
 
+
+
+
+
+
     pub fn resolve_migrations(&mut self) {
         if self.address_book.addresses.is_empty() {
             self.id_queues.migrating_ids.clear();
@@ -243,6 +248,9 @@ impl Container {
         }
         self.id_queues.migrating_ids.clear();
     }
+
+
+
 
     pub fn resolve_deads(&mut self) {
         let deads_in_turn = self.id_queues.dead_ids.len();

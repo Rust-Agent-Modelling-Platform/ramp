@@ -16,6 +16,7 @@ use config::ConfigError;
 use flexi_logger::Logger;
 use settings::Settings;
 use std::collections::HashMap;
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
@@ -26,9 +27,11 @@ use crate::address_book::AddressBook;
 use crate::container::Container;
 use crate::message::Message;
 use crate::settings::AgentConfig;
+use zmq::Socket;
 
 fn main() -> Result<(), ConfigError> {
     init_logger();
+    let context = zmq::Context::new();
 
     let settings = Settings::new()?;
     let simulation_dir_path = stats::create_simulation_dir(constants::STATS_DIR_NAME);
@@ -38,6 +41,104 @@ fn main() -> Result<(), ConfigError> {
 
     stats::copy_simulation_settings(&simulation_dir_path);
 
+    //Settings for sockets
+    let is_coordinator = true;
+
+    let coordinator_address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    let node1_address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    let worker_num = 1;
+
+    //Same for every node in the cluster
+    let router_port = 5555;
+
+    //This port has to be different on each instance if working on localhost
+    let publisher_port = 5561;
+
+    //Should be a list of node addresses
+    let node1_port = 5563;
+    //let node2_port = ...
+    //let node3_port = ...
+
+    let router = context.socket(zmq::ROUTER).unwrap();
+    let requester = context.socket(zmq::DEALER).unwrap();
+    let publisher = context.socket(zmq::PUB).unwrap();
+    let subscriber = context.socket(zmq::SUB).unwrap();
+
+    log::debug!("Main thread is socket thread - beginning:");
+    log::debug!("1/5 Initializing router/dealer sockets");
+    if is_coordinator {
+        //Set up sockets of the coordinator
+        //First the router
+        assert!(router
+            .bind(&format!(
+                "tcp://{}:{}",
+                coordinator_address.to_string(),
+                router_port.to_string()
+            ))
+            .is_ok());
+    } else {
+        //Set up the requester socket of a worker
+        assert!(requester
+            .connect(&format!(
+                "tcp://{}:{}",
+                coordinator_address.to_string(),
+                router_port.to_string()
+            ))
+            .is_ok());
+    }
+
+    log::debug!("2/5 Initializing pub/sub sockets");
+    //Publisher:
+    publisher
+        .bind(&format!(
+            "tcp://{}:{}",
+            coordinator_address.to_string(),
+            publisher_port.to_string()
+        ))
+        .expect("failed binding publisher");
+
+    //Subscribers: this should be in a loop according to how many workers there are
+    subscriber
+        .connect(&format!(
+            "tcp://{}:{}",
+            node1_address.to_string(),
+            node1_port.to_string()
+        ))
+        .expect("failed connecting subscriber");
+
+    //Each node should have some kind of id, also in config
+    subscriber.set_subscribe(b"A").expect("failed subscribing");
+
+    //This is a blocking call
+    if is_coordinator {
+        log::debug!("3/5 This is the leader, so waiting until all workers are ready...");
+        let mut count = 0;
+        while count != worker_num {
+            let return_address = router.recv_msg(0).unwrap();
+            let _null_del = router.recv_msg(0).unwrap();
+            let data = router.recv_msg(0).unwrap();
+
+            log::debug!("Got message: {}", data.as_str().unwrap());
+
+            router.send(return_address, zmq::SNDMORE).unwrap();
+            router.send(data, 0).unwrap();
+
+            count += 1;
+        }
+    } else {
+        log::debug!("3/5 This is a worker node, so sending READY message");
+        //let id: Vec<u8> = vec![80, 69, 69, 82, 66]; //ASCII codes
+        //requester.set_identity(&id);
+        requester
+            .send(zmq::Message::from(""), zmq::SNDMORE)
+            .unwrap();
+        requester.send("B is ready", 0).unwrap();
+
+        let msg = requester.recv_msg(0).unwrap();;
+        println!("Received: {}. Good to go", msg.as_str().unwrap());
+    }
+
+    log::debug!("4/5 Begin simulation");
     start_simulation(
         settings,
         agent_config,
@@ -46,6 +147,17 @@ fn main() -> Result<(), ConfigError> {
         island_ids,
         simulation_dir_path,
     );
+
+    log::debug!("5/5 Enter polling loop, receive agents and send them to worker threads");
+    loop {
+        let mut items = [subscriber.as_poll_item(zmq::POLLIN)];
+        zmq::poll(&mut items, -1).unwrap();
+
+        if items[0].is_readable() {
+            let message = subscriber.recv_msg(0).unwrap();
+            //send agent to a thread
+        }
+    }
 
     Ok(())
 }
@@ -59,10 +171,12 @@ fn start_simulation(
     simulation_dir_path: String,
 ) {
     let mut threads = Vec::<thread::JoinHandle<_>>::new();
+
     for island_no in 0..settings.islands {
         let island_stats_dir_path =
             stats::create_island_stats_dir(&simulation_dir_path, &island_ids[island_no as usize]);
         let address_book = create_address_book(&txes, &mut rxes, &island_ids, island_no as usize);
+
         let mut container = Container::new(
             island_ids[island_no as usize],
             address_book,
@@ -72,6 +186,7 @@ fn start_simulation(
             agent_config.clone(),
             island_stats_dir_path,
         );
+
         threads.push(thread::spawn(move || {
             container.run();
         }));
@@ -83,7 +198,7 @@ fn start_simulation(
 }
 
 fn init_logger() {
-    Logger::with_str("info")
+    Logger::with_str("debug")
         .format_for_stderr(flexi_logger::colored_default_format)
         .start()
         .unwrap();
