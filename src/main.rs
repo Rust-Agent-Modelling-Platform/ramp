@@ -20,14 +20,15 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
+use std::cell::RefCell;
 use std::thread;
 use uuid::Uuid;
+use zmq::Socket;
 
 use crate::address_book::AddressBook;
 use crate::container::Container;
 use crate::message::Message;
 use crate::settings::AgentConfig;
-use zmq::Socket;
 
 fn main() -> Result<(), ConfigError> {
     init_logger();
@@ -37,7 +38,10 @@ fn main() -> Result<(), ConfigError> {
     let simulation_dir_path = stats::create_simulation_dir(constants::STATS_DIR_NAME);
     let agent_config = Arc::new(settings.agent_config);
     let (txes, rxes) = create_channels(settings.islands);
-    let island_ids = create_island_ids(settings.islands);
+
+    let mut island_ids = create_island_ids(settings.islands);
+    //islands_number is always the main thread
+    island_ids.push(Uuid::new_v4());
 
     stats::copy_simulation_settings(&simulation_dir_path);
 
@@ -146,18 +150,11 @@ fn main() -> Result<(), ConfigError> {
         rxes,
         island_ids,
         simulation_dir_path,
+        subscriber
     );
 
     log::debug!("5/5 Enter polling loop, receive agents and send them to worker threads");
-    loop {
-        let mut items = [subscriber.as_poll_item(zmq::POLLIN)];
-        zmq::poll(&mut items, -1).unwrap();
 
-        if items[0].is_readable() {
-            let message = subscriber.recv_msg(0).unwrap();
-            //send agent to a thread
-        }
-    }
 
     Ok(())
 }
@@ -169,12 +166,14 @@ fn start_simulation(
     mut rxes: Vec<Receiver<Message>>,
     island_ids: Vec<Uuid>,
     simulation_dir_path: String,
+    subscriber: Socket,
 ) {
     let mut threads = Vec::<thread::JoinHandle<_>>::new();
 
     for island_no in 0..settings.islands {
         let island_stats_dir_path =
             stats::create_island_stats_dir(&simulation_dir_path, &island_ids[island_no as usize]);
+
         let address_book = create_address_book(&txes, &mut rxes, &island_ids, island_no as usize);
 
         let mut container = Container::new(
@@ -185,6 +184,7 @@ fn start_simulation(
             settings.turns,
             agent_config.clone(),
             island_stats_dir_path,
+            island_ids[settings.islands as usize]
         );
 
         threads.push(thread::spawn(move || {
@@ -195,6 +195,39 @@ fn start_simulation(
     for thread in threads {
         thread.join().unwrap();
     }
+
+    loop {
+        //1. Check if anybody wants to migrate out from this node - check local tx
+        let mut incoming = rxes[0].try_iter();
+//        if incoming.next().is_none() == true {
+//            println!("--------------no agents------------");
+//        }
+        let mut migrants_num = 0;
+        for agent in incoming {
+            match agent {
+                Message::Agent(migrant) => {
+                    migrants_num += 1;
+                    println!(">>>>>>>>>>>>>>>>>>>>>>>GOT HERE<<<<<<<<<<<<<<  {}", migrants_num);
+
+                },
+                _ => println!("MEANS END")
+            }
+        }
+
+
+
+//        println!("Also got here");
+//        //2. Check if anybody wants to migrate to this node - check the sub socket
+//        let mut items = [subscriber.as_poll_item(zmq::POLLIN)];
+//        zmq::poll(&mut items, -1).unwrap();
+//
+//        if items[0].is_readable() {
+//            let message = subscriber.recv_msg(0).unwrap();
+//            //send agent to a thread
+//        }
+    }
+
+
 }
 
 fn init_logger() {
@@ -212,6 +245,10 @@ fn create_channels(islands_number: u32) -> (Vec<Sender<Message>>, Vec<Receiver<M
         txes.push(tx);
         rxes.push(rx);
     }
+    //And at the end add the main thread channel
+    let (tx_main, rx_main) = mpsc::channel();
+    txes.push(tx_main);
+    rxes.push(rx_main);
     (txes, rxes)
 }
 

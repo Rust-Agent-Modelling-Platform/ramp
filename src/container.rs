@@ -64,6 +64,7 @@ pub struct Container {
     island_stats_dir_path: String,
     address_book: AddressBook,
     id_queues: IdQueues,
+    main_thread_uuid: Uuid
 }
 
 impl Container {
@@ -76,6 +77,7 @@ impl Container {
         turns: u32,
         agent_config: Arc<AgentConfig>,
         island_stats_dir_path: String,
+        main_thread_uuid: Uuid,
     ) -> Self {
         Container {
             id,
@@ -92,6 +94,7 @@ impl Container {
             address_book,
             id_queues: IdQueues::new(),
             stats: Stats::new(),
+            main_thread_uuid
         }
     }
 
@@ -228,26 +231,42 @@ impl Container {
 
 
     pub fn resolve_migrations(&mut self) {
+        log::debug!("Number of migrating agents this turn: {}", self.id_queues.migrating_ids.len() );
         if self.address_book.addresses.is_empty() {
             self.id_queues.migrating_ids.clear();
             return;
         }
         for id in &self.id_queues.migrating_ids {
-            if let Some((tx, _)) = self
-                .address_book
+//            if let Some((tx, _)) = self
+//                .address_book
+//                .addresses
+//                .values()
+//                .find(|(_tx, state)| *state)
+//            {
+
+            if let Some((tx, _)) = self.
+                address_book
                 .addresses
-                .values()
-                .find(|(_tx, state)| *state)
+                .get(&self.main_thread_uuid)
             {
+
                 // hashmap guarantees randomness
                 match self.id_agent_map.remove(id) {
-                    Some(agent) => tx.send(Message::Agent(agent.into_inner())).unwrap(),
+                    Some(agent) => {
+                        log::debug!("---------Sending agent to main thread---");
+                        tx.send(Message::Agent(agent.into_inner())).unwrap()
+                    },
                     None => log::warn!("No id in agent map, id: {}", id),
                 }
             }
         }
         self.id_queues.migrating_ids.clear();
+
     }
+
+
+
+
 
 
 
