@@ -64,7 +64,6 @@ pub struct Container {
     island_stats_dir_path: String,
     address_book: AddressBook,
     id_queues: IdQueues,
-    main_thread_uuid: Uuid
 }
 
 impl Container {
@@ -77,7 +76,6 @@ impl Container {
         turns: u32,
         agent_config: Arc<AgentConfig>,
         island_stats_dir_path: String,
-        main_thread_uuid: Uuid,
     ) -> Self {
         Container {
             id,
@@ -94,7 +92,6 @@ impl Container {
             address_book,
             id_queues: IdQueues::new(),
             stats: Stats::new(),
-            main_thread_uuid
         }
     }
 
@@ -244,32 +241,25 @@ impl Container {
 //                .find(|(_tx, state)| *state)
 //            {
 
-            if let Some((tx, _)) = self.
-                address_book
-                .addresses
-                .get(&self.main_thread_uuid)
-            {
+            // if let Some((tx, _)) = self.
+            //     address_book
+            //     .addresses
+            //     .get(&self.main_thread_uuid)
+            // {
 
                 // hashmap guarantees randomness
                 match self.id_agent_map.remove(id) {
                     Some(agent) => {
                         log::debug!("---------Sending agent to main thread---");
-                        tx.send(Message::Agent(agent.into_inner())).unwrap()
+                        self.address_book.network_thread.send(Message::Agent(agent.into_inner())).unwrap()
                     },
                     None => log::warn!("No id in agent map, id: {}", id),
                 }
-            }
+            // }
         }
         self.id_queues.migrating_ids.clear();
 
     }
-
-
-
-
-
-
-
 
     pub fn resolve_deads(&mut self) {
         let deads_in_turn = self.id_queues.dead_ids.len();
@@ -322,6 +312,7 @@ impl Container {
                     Some(address) => address.1 = false,
                     None => println!("No such key"),
                 },
+                _ => log::error!("Unexpected msg")
             }
         }
         self.stats.migrants_received_in_turn.push(migrants_num);

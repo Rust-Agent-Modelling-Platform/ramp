@@ -114,10 +114,10 @@ pub fn create_simulation_dir(root_dir_path: &str) -> String {
     simulation_dir_path
 }
 
-pub fn copy_simulation_settings(dest_dir_path: &str) {
-    let dest_file_path = format!("{}/Settings.toml", dest_dir_path);
+pub fn copy_simulation_settings(dest_dir_path: &str, file_name: String) {
+    let dest_file_path = format!("{}/{}.toml", dest_dir_path, file_name);
     let _file = File::create(&dest_file_path).unwrap();
-    fs::copy("Settings.toml", dest_file_path).unwrap();
+    fs::copy(format!("{}.toml", file_name), dest_file_path).unwrap();
 }
 
 pub fn create_island_stats_dir(simulation_dir_path: &str, island_id: &Uuid) -> String {
