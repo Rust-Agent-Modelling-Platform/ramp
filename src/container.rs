@@ -14,6 +14,7 @@ use crate::agent::Agent;
 use crate::message::Message;
 use crate::settings::AgentConfig;
 use crate::stats;
+use std::borrow::Borrow;
 
 struct IdQueues {
     pub dead_ids: Vec<Uuid>,
@@ -222,43 +223,43 @@ impl Container {
         self.stats.meetings_in_turn.push(meeting_num);
     }
 
-
-
-
-
-
     pub fn resolve_migrations(&mut self) {
-        log::debug!("Number of migrating agents this turn: {}", self.id_queues.migrating_ids.len() );
+        log::debug!(
+            "Number of migrating agents this turn: {}",
+            self.id_queues.migrating_ids.len()
+        );
         if self.address_book.addresses.is_empty() {
             self.id_queues.migrating_ids.clear();
             return;
         }
         for id in &self.id_queues.migrating_ids {
-//            if let Some((tx, _)) = self
-//                .address_book
-//                .addresses
-//                .values()
-//                .find(|(_tx, state)| *state)
-//            {
-
-            // if let Some((tx, _)) = self.
-            //     address_book
-            //     .addresses
-            //     .get(&self.main_thread_uuid)
-            // {
-
-                // hashmap guarantees randomness
+            let prob = thread_rng().gen_range(0, 100);
+            if prob <= 50 {
+                //send to local island
+                match self.address_book.addresses.iter().find(|&x| (x.1).1 == true) {
+                    Some((island_uuid, island)) => match self.id_agent_map.remove(id) {
+                        Some(agent) => match island.0.send(Message::Agent(agent.into_inner())) {
+                            Ok(()) => log::error!("Inter-island successfully sent"),
+                            Err(e) => log::error!("[Container] INTER-ISLAND SENDING UNSUCCESSFUL: {}", e),
+                        }
+                        None => log::warn!("No id in agent map, id: {}", id),
+                    },
+                    None => println!("There are no more active islands - migrant is being dropped"),
+                }
+            } else {
                 match self.id_agent_map.remove(id) {
                     Some(agent) => {
-                        log::debug!("---------Sending agent to main thread---");
-                        self.address_book.network_thread.send(Message::Agent(agent.into_inner())).unwrap()
-                    },
+                        log::error!(">> outgoing agent");
+                        self.address_book
+                            .network_thread
+                            .send(Message::Agent(agent.into_inner()))
+                            .unwrap()
+                    }
                     None => log::warn!("No id in agent map, id: {}", id),
                 }
-            // }
+            }
         }
         self.id_queues.migrating_ids.clear();
-
     }
 
     pub fn resolve_deads(&mut self) {
@@ -294,25 +295,31 @@ impl Container {
     fn finish_connections(&self) {
         self.address_book.addresses.iter().for_each(|value| {
             if let (_, (address, true)) = value {
-                address.send(Message::Fin(self.id)).unwrap()
+                address.send(Message::Fin(self.id)).unwrap();
             }
         });
+        self.address_book.sub_tx.send(Message::Fin(self.id)).unwrap();
     }
 
     fn receive_messages(&mut self) {
         let messages = self.address_book.rx.try_iter();
         let mut migrants_num = 0;
         for message in messages {
+            //if let Message::Fin(uuid) = message {
+                //println!("{:?}", &message);
+            //}
             match message {
                 Message::Agent(migrant) => {
                     migrants_num += 1;
                     self.id_agent_map.insert(migrant.id, RefCell::new(migrant));
                 }
                 Message::Fin(island_id) => match self.address_book.addresses.get_mut(&island_id) {
-                    Some(address) => address.1 = false,
+                    Some(address) => {
+                        address.1 = false;
+                    },
                     None => println!("No such key"),
                 },
-                _ => log::error!("Unexpected msg")
+                _ => log::error!("Unexpected msg"),
             }
         }
         self.stats.migrants_received_in_turn.push(migrants_num);

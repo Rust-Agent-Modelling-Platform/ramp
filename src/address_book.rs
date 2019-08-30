@@ -10,7 +10,6 @@ pub struct AddressBook {
     pub network_thread: Sender<Message>,
     pub rx: Receiver<Message>,
     pub sub_tx: Sender<Message>,
-
 }
 
 impl AddressBook {
@@ -18,8 +17,13 @@ impl AddressBook {
         addresses: HashMap<Uuid, (Sender<Message>, State)>,
         network_thread: Sender<Message>,
         rx: Receiver<Message>,
-        sub_tx: Sender<Message>
+        sub_tx: Sender<Message>,
     ) -> AddressBook {
-        AddressBook { addresses, network_thread, rx, sub_tx }
+        AddressBook {
+            addresses,
+            network_thread,
+            rx,
+            sub_tx,
+        }
     }
 }

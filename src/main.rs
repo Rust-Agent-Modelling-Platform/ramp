@@ -11,20 +11,20 @@ mod message;
 mod settings;
 mod stats;
 
+use agent::Agent;
 use config;
 use config::ConfigError;
 use flexi_logger::Logger;
+use rand::{thread_rng, Rng};
 use settings::Settings;
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr};
-use rand::{thread_rng, Rng};
+use std::net::IpAddr;
 use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::sync::Arc;
-use std::{thread, env};
+use std::{env, thread};
 use uuid::Uuid;
-use agent::Agent;
-use zmq::Socket;
+use zmq::{Socket, Error};
 
 use crate::address_book::AddressBook;
 use crate::container::Container;
@@ -92,7 +92,7 @@ fn load_settings() -> Settings {
 
 fn parse_input_ips(settings: &Settings) -> Vec<(IpAddr, Port)> {
     let mut ips: Vec<(IpAddr, Port)> = Vec::new();
-    let ips_str: Vec<String> = settings.network.ips.clone();  
+    let ips_str: Vec<String> = settings.network.ips.clone();
     for address in ips_str {
         let mut split: Vec<&str> = address.split(":").collect();
         ips.push((split[0].parse().unwrap(), split[1].parse().unwrap()));
@@ -102,23 +102,24 @@ fn parse_input_ips(settings: &Settings) -> Vec<(IpAddr, Port)> {
 
 fn bind_publisher(publisher: &Socket, settings: &Settings) {
     publisher
-        .bind(&format!("tcp://{}:{}", 
-                settings.network.host_ip.clone(), 
-                settings.network.pub_port.to_string()
-                )
-        )
+        .bind(&format!(
+            "tcp://{}:{}",
+            settings.network.host_ip.clone(),
+            settings.network.pub_port.to_string()
+        ))
         .expect("failed binding pub");
 }
 
 fn subscribe(ips: &Vec<(IpAddr, Port)>, sub: &Socket, settings: &Settings) {
     ips.iter().for_each(|(ip, port)| {
-        sub
-            .connect(&format!("tcp://{}:{}", ip.to_string(), port.to_string()))
+        sub.connect(&format!("tcp://{}:{}", ip.to_string(), port.to_string()))
             .expect("failed connecting sub");
     });
-    let private_sub_key = &format!("{}:{}", 
-        settings.network.host_ip.to_string(), 
-        settings.network.pub_port.to_string());
+    let private_sub_key = &format!(
+        "{}:{}",
+        settings.network.host_ip.to_string(),
+        settings.network.pub_port.to_string()
+    );
     sub.set_subscribe(private_sub_key.as_bytes())
         .expect("failed seting sub key");
     sub.set_subscribe(START_SIMULATION_KEY.as_bytes())
@@ -127,22 +128,22 @@ fn subscribe(ips: &Vec<(IpAddr, Port)>, sub: &Socket, settings: &Settings) {
 
 fn bind_rep_sock(rep: &Socket, settings: &Settings) {
     assert!(rep
-            .bind(&format!(
-                "tcp://{}:{}",
-                settings.network.host_ip.to_string(),
-                settings.network.coordinator_rep_port.to_string()
-            ))
-            .is_ok());
+        .bind(&format!(
+            "tcp://{}:{}",
+            settings.network.host_ip.to_string(),
+            settings.network.coordinator_rep_port.to_string()
+        ))
+        .is_ok());
 }
 
 fn connect_to_rep_sock(req: &Socket, settings: &Settings) {
     assert!(req
-            .connect(&format!(
-                "tcp://{}:{}",
-                settings.network.coordinator_ip.to_string(),
-                settings.network.coordinator_rep_port.to_string()
-            ))
-            .is_ok());
+        .connect(&format!(
+            "tcp://{}:{}",
+            settings.network.coordinator_ip.to_string(),
+            settings.network.coordinator_rep_port.to_string()
+        ))
+        .is_ok());
 }
 
 fn wait_for_hosts(rep: &Socket, settings: &Settings) {
@@ -158,18 +159,26 @@ fn wait_for_hosts(rep: &Socket, settings: &Settings) {
 
 fn notify_hosts(publisher: &Socket) {
     log::info!("Notyfing hosts");
-    publisher.send(START_SIMULATION_KEY, 0).expect("couldn't notify hosts to start sim");
+    publisher
+        .send(START_SIMULATION_KEY, 0)
+        .expect("couldn't notify hosts to start sim");
 }
 
 fn send_ready_msg(req: &Socket, settings: &Settings) {
-    req.send(format!("{}:{}", settings.network.host_ip, settings.network.pub_port).into_bytes(), zmq::SNDMORE).unwrap();
+    req.send(
+        format!("{}:{}", settings.network.host_ip, settings.network.pub_port).into_bytes(),
+        zmq::SNDMORE,
+    )
+    .unwrap();
     req.send(&HOST_READY_MSG, 0).unwrap();
     let msg = req.recv_msg(0).unwrap();;
     log::info!("{}. Waiting for signal to start sim", msg.as_str().unwrap());
 }
 
-fn wait_for_signal(sub: &Socket){
-    let msg = sub.recv_msg(0).expect("failed receiving signal to start sim");
+fn wait_for_signal(sub: &Socket) {
+    let msg = sub
+        .recv_msg(0)
+        .expect("failed receiving signal to start sim");
     log::info!("{}", std::str::from_utf8(&msg).unwrap());
 }
 
@@ -184,7 +193,7 @@ fn start_simulation(
     publisher: Socket,
     network_tx: Sender<Message>,
     network_rx: Receiver<Message>,
-    ips: Vec<(IpAddr, Port)>
+    ips: Vec<(IpAddr, Port)>,
 ) {
     let mut threads = Vec::<thread::JoinHandle<_>>::new();
     let (tx, rx) = mpsc::channel();
@@ -193,7 +202,14 @@ fn start_simulation(
         let island_stats_dir_path =
             stats::create_island_stats_dir(&simulation_dir_path, &island_ids[island_no as usize]);
 
-        let address_book = create_address_book(&txes, &mut rxes, &island_ids, island_no as i32, &network_tx, &tx);
+        let address_book = create_address_book(
+            &txes,
+            &mut rxes,
+            &island_ids,
+            island_no as i32,
+            &network_tx,
+            &tx,
+        );
 
         let mut container = Container::new(
             island_ids[island_no as usize],
@@ -210,90 +226,127 @@ fn start_simulation(
         }));
     }
 
-
     let tx_clone = tx.clone();
-    thread::spawn(move || {
+    threads.push(thread::spawn(move || {
         start_publisher_thread(network_rx, publisher, ips, settings, tx_clone);
-    });
-    
-    let address_book = create_address_book(&txes, &mut rxes, &island_ids, -1, &network_tx, &tx);
+    }));
 
-    thread::spawn(move || {
+    let address_book = create_address_book(&txes, &mut rxes, &island_ids, -1, &network_tx, &tx);
+    threads.push(thread::spawn(move || {
         start_subscriber_thread(rx, subscriber, address_book);
-    });
-    
+    }));
+
     for thread in threads {
         thread.join().unwrap();
     }
 }
 
-fn start_publisher_thread(network_rx: Receiver<Message>, publisher: Socket, ips: Vec<(IpAddr, Port)>, settings: Settings, tx: Sender<Message>) {
+fn start_publisher_thread(
+    network_rx: Receiver<Message>,
+    publisher: Socket,
+    ips: Vec<(IpAddr, Port)>,
+    settings: Settings,
+    tx: Sender<Message>,
+) {
     loop {
-            let mut incoming = network_rx.try_iter();
-            let mut migrants_num = 0;
-            for agent in incoming {
-                match agent {
-                    Message::Agent(migrant) => {
-                        migrants_num += 1;
-                        // println!("Migrant count:  {}", migrants_num);
-                        let encoded: Vec<u8> = bincode::serialize(&migrant).unwrap();
-                        // log::error!("{:#?}", ips);
-                        let random_index = thread_rng().gen_range(0, ips.len());
-                        let (ip, port) = ips.get(random_index).unwrap();
-                        // log::error!("{}", port);
-                        publisher
-                            .send(&format!("{}:{}", ip.to_string(), port.to_string()), zmq::SNDMORE)
-                            .expect("failed sending sub key");
-                        
-                        // only to know from which host is msg
-                        publisher
-                            .send(&format!("{}", settings.network.pub_port), zmq::SNDMORE) 
-                            .expect("failed sending from msg");
-                        
-                        publisher
-                            .send(encoded, 0)
-                            .expect("failed sending msg");
+        let incoming = network_rx.try_iter();
+        for msg in incoming {
+            match msg {
+                // 1. Agent migrating form this node -> some other node
+                Message::Agent(migrant) => {
+                    let encoded: Vec<u8> = bincode::serialize(&migrant).unwrap();
+                    let random_index = thread_rng().gen_range(0, ips.len());
+                    let (ip, port) = ips.get(random_index).unwrap();
 
-                    },
-                    Message::FinSim => {
-                        tx.send(Message::FinSim).unwrap();
-                        log::info!("Ending simulation in network sender thread");
-                        break;
-                    }
-                    _ => println!("MEANS END")
+                    log::error!(
+                        "Sending Agent{} to {}:{}",
+                        &migrant.id.to_string()[..8],
+                        &ip.to_string(),
+                        &port.to_string()
+                    );
+                    publisher
+                        .send(
+                            &format!("{}:{}", ip.to_string(), port.to_string()),
+                            zmq::SNDMORE,
+                        )
+                        .expect("failed sending sub key");
+                    publisher
+                        .send(&format!("{}", settings.network.pub_port), zmq::SNDMORE)
+                        .expect("failed sending from msg");
+                    publisher.send(encoded, 0).expect("failed sending msg");
                 }
+
+                // 2. End of the simulation
+                Message::FinSim => {
+                    tx.send(Message::FinSim).unwrap();
+                    log::info!("Ending simulation in network sender thread");
+                    break;
+                }
+
+                _ => log::error!("Unexpected message"),
             }
         }
+    }
 }
 
-fn start_subscriber_thread(rx: Receiver<Message>, subscriber: Socket, address_book: AddressBook) {
+fn start_subscriber_thread(
+    rx: Receiver<Message>,
+    subscriber: Socket,
+    mut address_book: AddressBook,
+) {
     loop {
-        // to na pewno jest za mało bo recv_msg niżej jest blokujące
-        let messages = rx.try_iter();
-        for mess in messages {
-            match mess {
+        let incoming = rx.try_iter();
+        for msg in incoming {
+            match msg {
+                //1. Island informs that it has finished working and is no longer active
+                Message::Fin(uuid) => {
+                    log::error!("Island {} has finished working - updating information in sub_thread address_book", &uuid.to_string()[..8]);
+                    address_book.addresses.get_mut(&uuid).unwrap().1 = false;
+                }
+
                 Message::FinSim => {
                     log::info!("Ending simulation in network receiver thread");
                     break;
-                },
-                _ => log::info!("Received some message. ")
+                }
+                _ => log::info!("Unexpected message in sub_thread"),
             }
         }
 
-        let sub_key = subscriber
-            .recv_msg(0)
-            .expect("failed receiving sub key");
-        
-        let from = subscriber
-            .recv_msg(0)
-            .expect("failed receiving from msg");
+        //Next step: non-blocking check if there are any new agents waiting to be added to our system
+        let mut items = [subscriber.as_poll_item(zmq::POLLIN)];
+        zmq::poll(&mut items, -1).unwrap();
+        if items[0].is_readable() {
+            let sub_key = subscriber.recv_msg(0).expect("failed receiving sub key");
+            let from = subscriber.recv_msg(0).expect("failed receiving from msg");
+            let message = subscriber.recv_msg(0).expect("failed receiving msg");
 
-        let message = subscriber
-            .recv_msg(0)
-            .expect("failed receiving msg");
+            let decoded_agent: Agent = bincode::deserialize(&message[..]).expect("ERROR ERROR ERROR");
 
-        let decoded_agent: Agent = bincode::deserialize(&message[..]).unwrap();
-        println!("Received agent, from {}", std::str::from_utf8(&from).unwrap());
+            log::error!(
+                "Received Agent{} from {}",
+                &decoded_agent.id.to_string()[..8],
+                std::str::from_utf8(&from).unwrap()
+            );
+
+            //Get some random hashmap value that is active. If no more active - drop agent IDGAF
+            match address_book.addresses.iter().find(|&x| (x.1).1) {
+                Some((island_uuid, island_tx)) => {
+                    //Send agent here
+                    log::error!(
+                        "Sending Agent{} to Island {}",
+                        &decoded_agent.id.to_string()[..8],
+                        &island_uuid.to_string()[..8]
+                    );
+                    match island_tx.0.send(Message::Agent(decoded_agent.into())) {
+                        Ok(()) => log::error!("Successfully sent"),
+                        Err(e) => log::error!("[Subscriber] INTERNAL SENDING UNSUCCESSFUL: {}", e),
+                    }
+                }
+                None => {
+                    println!("There are no more active islands - incoming migrant is being dropped")
+                }
+            }
+        }
     }
 }
 
@@ -303,7 +356,6 @@ fn init_logger() {
         .start()
         .unwrap();
 }
-
 
 fn create_channels(islands_number: u32) -> (Vec<Sender<Message>>, Vec<Receiver<Message>>) {
     let mut txes = Vec::<Sender<Message>>::new();
@@ -316,7 +368,6 @@ fn create_channels(islands_number: u32) -> (Vec<Sender<Message>>, Vec<Receiver<M
     (txes, rxes)
 }
 
-
 fn create_island_ids(islands_number: u32) -> Vec<Uuid> {
     let mut island_ids = Vec::<Uuid>::new();
     for _ in 0..islands_number {
@@ -324,7 +375,6 @@ fn create_island_ids(islands_number: u32) -> Vec<Uuid> {
     }
     island_ids
 }
-
 
 fn create_address_book(
     txes: &[Sender<Message>],
@@ -340,6 +390,22 @@ fn create_address_book(
             addresses.insert(island_ids[i], (mpsc::Sender::clone(tx), true));
         }
     }
-    let rx = rxes.remove(0);
-    AddressBook::new(addresses, mpsc::Sender::clone(network_thread), rx, mpsc::Sender::clone(sub_tx))
+    if rxes.len() >= 1 {
+        let rx = rxes.remove(0);
+        AddressBook::new(
+            addresses,
+            mpsc::Sender::clone(network_thread),
+            rx,
+            mpsc::Sender::clone(sub_tx),
+        )
+    } else {
+        //This is for the sub thread
+        let (_, rx) = mpsc::channel();
+        AddressBook::new(
+            addresses,
+            mpsc::Sender::clone(network_thread),
+            rx,
+            mpsc::Sender::clone(sub_tx),
+        )
+    }
 }
