@@ -1,11 +1,12 @@
-use colored::*;
-use rand::{thread_rng, Rng};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::process;
 use std::sync::Arc;
 use std::time::Instant;
+
+use colored::*;
+use rand::{Rng, thread_rng};
 use uuid::Uuid;
 
 use crate::action::Action;
@@ -14,7 +15,6 @@ use crate::agent::Agent;
 use crate::message::Message;
 use crate::settings::AgentConfig;
 use crate::stats;
-use std::borrow::Borrow;
 
 struct IdQueues {
     pub dead_ids: Vec<Uuid>,
@@ -235,23 +235,30 @@ impl Container {
         for id in &self.id_queues.migrating_ids {
             let prob = thread_rng().gen_range(0, 100);
             if prob <= 50 {
-                //send to local island
-                match self.address_book.addresses.iter().find(|&x| (x.1).1 == true) {
-                    Some((island_uuid, island)) => match self.id_agent_map.remove(id) {
-                        Some(agent) => match island.0.send(Message::Agent(agent.into_inner())) {
-                            Ok(()) => log::error!("Inter-island successfully sent"),
-                            Err(e) => log::error!("[Container] INTER-ISLAND SENDING UNSUCCESSFUL: {}", e),
-                        }
-                        None => log::warn!("No id in agent map, id: {}", id),
-                    },
-                    None => println!("There are no more active islands - migrant is being dropped"),
+                match self.id_agent_map.remove(id) {
+                    Some(agent) => match self
+                        .address_book
+                        .send_to_rnd(Message::Agent(agent.into_inner()))
+                        {
+                            Ok(()) => (),
+                            Err(e) => {
+//                                log::info!("No more active islands in system.");
+                                match e.0 {
+                                    Message::Agent(agent) => {
+                                        self.id_agent_map.insert(*id, RefCell::new(agent));
+                                    }
+                                    _ => log::info!("bad returend message"),
+                                }
+                            }
+                        },
+                    None => log::info!("No agent with id {}", id),
                 }
             } else {
                 match self.id_agent_map.remove(id) {
                     Some(agent) => {
-                        log::error!(">> outgoing agent");
+//                        log::error!(">> outgoing agent");
                         self.address_book
-                            .network_thread
+                            .pub_rx
                             .send(Message::Agent(agent.into_inner()))
                             .unwrap()
                     }
@@ -277,7 +284,6 @@ impl Container {
 
     fn finish(&self, start_time: Instant) {
         let duration = start_time.elapsed().as_secs();
-        self.finish_connections();
         stats::generate_stat_files(&self, duration, &self.island_stats_dir_path);
 
         log::info!("{}", "================= END =================".green());
@@ -292,33 +298,15 @@ impl Container {
         );
     }
 
-    fn finish_connections(&self) {
-        self.address_book.addresses.iter().for_each(|value| {
-            if let (_, (address, true)) = value {
-                address.send(Message::Fin(self.id)).unwrap();
-            }
-        });
-        self.address_book.sub_tx.send(Message::Fin(self.id)).unwrap();
-    }
-
     fn receive_messages(&mut self) {
-        let messages = self.address_book.rx.try_iter();
+        let messages = self.address_book.self_rx.try_iter();
         let mut migrants_num = 0;
         for message in messages {
-            //if let Message::Fin(uuid) = message {
-                //println!("{:?}", &message);
-            //}
             match message {
                 Message::Agent(migrant) => {
                     migrants_num += 1;
                     self.id_agent_map.insert(migrant.id, RefCell::new(migrant));
                 }
-                Message::Fin(island_id) => match self.address_book.addresses.get_mut(&island_id) {
-                    Some(address) => {
-                        address.1 = false;
-                    },
-                    None => println!("No such key"),
-                },
                 _ => log::error!("Unexpected msg"),
             }
         }
