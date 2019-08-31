@@ -1,17 +1,17 @@
 #[macro_use]
 extern crate serde_derive;
 
-use std::{env, thread};
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::sync::Arc;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
+use std::sync::Arc;
+use std::{env, thread};
 
 use config;
 use config::ConfigError;
 use flexi_logger::Logger;
-use rand::{Rng, thread_rng};
+use rand::{thread_rng, Rng};
 use uuid::Uuid;
 use zmq::Socket;
 
@@ -169,7 +169,7 @@ fn send_ready_msg(req: &Socket, settings: &Settings) {
         format!("{}:{}", settings.network.host_ip, settings.network.pub_port).into_bytes(),
         zmq::SNDMORE,
     )
-        .unwrap();
+    .unwrap();
     req.send(&HOST_READY_MSG, 0).unwrap();
     let msg = req.recv_msg(0).unwrap();
     ;
@@ -183,6 +183,7 @@ fn wait_for_signal(sub: &Socket) {
     log::info!("{}", std::str::from_utf8(&msg).unwrap());
 }
 
+#[allow(clippy::too_many_arguments)]
 fn start_simulation(
     settings: Settings,
     agent_config: Arc<AgentConfig>,
@@ -255,12 +256,6 @@ fn start_publisher_thread(
                     let random_index = thread_rng().gen_range(0, ips.len());
                     let (ip, port) = ips.get(random_index).unwrap();
 
-//                    log::error!(
-//                        "Sending Agent{} to {}:{}",
-//                        &migrant.id.to_string()[..8],
-//                        &ip.to_string(),
-//                        &port.to_string()
-//                    );
                     publisher
                         .send(
                             &format!("{}:{}", ip.to_string(), port.to_string()),
@@ -287,7 +282,7 @@ fn start_publisher_thread(
 fn start_subscriber_thread(
     rx: Receiver<Message>,
     subscriber: Socket,
-    address_book: AddressBook,
+    mut address_book: AddressBook,
 ) {
     log::info!("Starting sub thread");
     let mut fin_sim = false;
@@ -309,35 +304,17 @@ fn start_subscriber_thread(
         zmq::poll(&mut items, -1).unwrap();
         if items[0].is_readable() {
             let _sub_key = subscriber.recv_msg(0).expect("failed receiving sub key");
-            let from = subscriber.recv_msg(0).expect("failed receiving from msg");
+            let _from = subscriber.recv_msg(0).expect("failed receiving from msg");
             let message = subscriber.recv_msg(0).expect("failed receiving msg");
 
             let decoded_agent: Agent =
-                bincode::deserialize(&message[..]).expect("ERROR ERROR ERROR");
+                bincode::deserialize(&message[..]).expect("ERROR DESERIALIZING AGENT");
 
-//            log::error!(
-//                "Received Agent{} from {}",
-//                &decoded_agent.id.to_string()[..8],
-//                std::str::from_utf8(&from).unwrap()
-//            );
-
-            //Get some random hashmap value that is active. If no more active - drop agent IDGAF
-            // TODO replace with function from AddressBook#send_to_rnd()
-            match address_book.addresses.iter().find(|&x| (x.1).1) {
-                Some((island_uuid, island_tx)) => {
-                    //Send agent here
-//                    log::error!(
-//                        "Sending Agent{} to Island {}",
-//                        &decoded_agent.id.to_string()[..8],
-//                        &island_uuid.to_string()[..8]
-//                    );
-                    match island_tx.0.send(Message::Agent(decoded_agent)) {
-                        Ok(()) => (),//log::error!("Successfully sent"),
-                        Err(e) => (), // log::error!("[Subscriber] INTERNAL SENDING UNSUCCESSFUL: {}", e),
-                    }
-                }
-                None => {
-                    println!("There are no more active islands - incoming migrant is being dropped")
+            //Get some random hash map value that is active. If no more active - drop agent
+            match address_book.send_to_rnd(Message::Agent(decoded_agent)) {
+                Ok(()) => (),
+                Err(e) => {
+                    log::info!("{:?} (No more active islands in system)", e);
                 }
             }
         }

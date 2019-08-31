@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use colored::*;
-use rand::{Rng, thread_rng};
+use rand::{thread_rng, Rng};
 use uuid::Uuid;
 
 use crate::action::Action;
@@ -239,24 +239,22 @@ impl Container {
                     Some(agent) => match self
                         .address_book
                         .send_to_rnd(Message::Agent(agent.into_inner()))
-                        {
-                            Ok(()) => (),
-                            Err(e) => {
-//                                log::info!("No more active islands in system.");
-                                match e.0 {
-                                    Message::Agent(agent) => {
-                                        self.id_agent_map.insert(*id, RefCell::new(agent));
-                                    }
-                                    _ => log::info!("bad returend message"),
+                    {
+                        Ok(()) => (),
+                        Err(e) => {
+                            match e.0 {
+                                Message::Agent(agent) => {
+                                    self.id_agent_map.insert(*id, RefCell::new(agent));
                                 }
+                                _ => log::info!("Bad return message"),
                             }
-                        },
+                        }
+                    },
                     None => log::info!("No agent with id {}", id),
                 }
             } else {
                 match self.id_agent_map.remove(id) {
                     Some(agent) => {
-//                        log::error!(">> outgoing agent");
                         self.address_book
                             .pub_rx
                             .send(Message::Agent(agent.into_inner()))
