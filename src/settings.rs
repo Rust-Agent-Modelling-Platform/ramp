@@ -5,7 +5,7 @@ pub struct Settings {
     pub turns: u32,
     pub islands: u32,
     pub network: Network,
-    pub container: Container,
+    pub island: Island,
     pub agent_config: AgentConfig,
 }
 
@@ -21,7 +21,7 @@ pub struct Network {
 }
 
 #[derive(Debug, Deserialize, Copy, Clone)]
-pub struct Container {
+pub struct Island {
     pub agents_number: u32,
 }
 

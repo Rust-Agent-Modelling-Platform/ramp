@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::io::prelude::*;
 
 use crate::agent::Agent;
-use crate::container::Container;
+use crate::island::Island;
 
 // =================================== Info-generating methods =========================================================
 
@@ -53,7 +53,7 @@ use crate::container::Container;
 //    println!("{}", container.id_agent_map.len());
 //}
 
-pub fn get_best_fitness(container: &Container) -> Option<f64> {
+pub fn get_best_fitness(container: &Island) -> Option<f64> {
     let mut top_guy = match container.id_agent_map.values().take(1).last() {
         Some(a) => a,
         None => return None,
@@ -81,7 +81,7 @@ pub fn get_best_fitness(container: &Container) -> Option<f64> {
 //     log::info!("{}", top_guy.borrow().fitness.to_string().blue());
 // }
 
-pub fn get_most_fit_agent(container: &Container) -> &RefCell<Agent> {
+pub fn get_most_fit_agent(container: &Island) -> &RefCell<Agent> {
     let mut top_guy = container.id_agent_map.values().take(1).last().unwrap();
     for agent in container.id_agent_map.values() {
         if agent.borrow().fitness > top_guy.borrow().fitness {
@@ -136,7 +136,7 @@ pub fn create_island_stats_dir(simulation_dir_path: &str, island_id: &Uuid) -> S
     path
 }
 
-pub fn generate_stat_files(container: &Container, time: u64, dir: &str) {
+pub fn generate_stat_files(container: &Island, time: u64, dir: &str) {
     //In case of decision to create a Stat struct - could be useful
     let stat_types = vec![
         "time.csv",

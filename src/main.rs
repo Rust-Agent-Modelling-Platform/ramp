@@ -19,7 +19,7 @@ use agent::Agent;
 use settings::Settings;
 
 use crate::address_book::AddressBook;
-use crate::container::Container;
+use crate::island::Island;
 use crate::message::Message;
 use crate::settings::AgentConfig;
 
@@ -27,7 +27,7 @@ mod action;
 mod address_book;
 mod agent;
 mod constants;
-mod container;
+mod island;
 mod functions;
 mod message;
 mod settings;
@@ -211,18 +211,18 @@ fn start_simulation(
             &pub_tx,
         );
 
-        let mut container = Container::new(
+        let mut island = Island::new(
             island_ids[island_no as usize],
             address_book,
             &functions::rastrigin,
-            settings.container.agents_number,
+            settings.island.agents_number,
             settings.turns,
             agent_config.clone(),
             island_stats_dir_path,
         );
 
         threads.push(thread::spawn(move || {
-            container.run();
+            island.run();
         }));
     }
 

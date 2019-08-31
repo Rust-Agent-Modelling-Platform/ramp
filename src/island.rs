@@ -54,7 +54,7 @@ impl Stats {
     }
 }
 
-pub struct Container {
+pub struct Island {
     pub id: Uuid,
     pub id_agent_map: HashMap<Uuid, RefCell<Agent>>,
     pub turn_number: u64,
@@ -67,7 +67,7 @@ pub struct Container {
     id_queues: IdQueues,
 }
 
-impl Container {
+impl Island {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: Uuid,
@@ -78,9 +78,9 @@ impl Container {
         agent_config: Arc<AgentConfig>,
         island_stats_dir_path: String,
     ) -> Self {
-        Container {
+        Island {
             id,
-            id_agent_map: Container::create_id_agent_map(
+            id_agent_map: Island::create_id_agent_map(
                 agents_number,
                 &agent_config,
                 calculate_fitness,
@@ -342,7 +342,7 @@ impl Container {
 }
 
 // =============================================== Trait implementations ===========================================================
-impl fmt::Display for Container {
+impl fmt::Display for Island {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
