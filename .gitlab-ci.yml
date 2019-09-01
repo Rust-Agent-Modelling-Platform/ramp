@@ -5,6 +5,7 @@ variables:
 
 .rust_template: &rust_template
   before_script:
+    - apt-get update && apt-get install -y --no-install-recommends libzmq3-dev
     - rustc --version && cargo --version
   only: 
     - merge_request
