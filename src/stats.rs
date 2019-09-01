@@ -144,7 +144,10 @@ pub fn generate_stat_files(container: &Island, time: u64, dir: &str) {
         "best_agent_overall.csv",
         "meetings.csv",
         "procreations.csv",
-        "migrations.csv",
+        "all_received_migrations.csv",
+        "all_sent_migrations.csv",
+        "local_sent_migrations.csv",
+        "global_sent_migrations.csv",
         "deads.csv",
     ];
 
@@ -157,21 +160,33 @@ pub fn generate_stat_files(container: &Island, time: u64, dir: &str) {
         &get_most_fit_agent(container).borrow_mut(),
         format!("{}/{}", dir, stat_types[2]),
     );
-    write_meetings_csv(
+    write_to_csv(
         &container.stats.meetings_in_turn,
         format!("{}/{}", dir, stat_types[3]),
     );
-    write_procreations_csv(
+    write_to_csv(
         &container.stats.procreations_in_turn,
         format!("{}/{}", dir, stat_types[4]),
     );
-    write_migrations_csv(
-        &container.stats.migrants_received_in_turn,
+    write_to_csv(
+        &container.stats.all_received_migrations_in_turn,
         format!("{}/{}", dir, stat_types[5]),
     );
-    write_deads_csv(
-        &container.stats.deads_in_turn,
+    write_to_csv(
+        &container.stats.all_sent_migrations_in_turn,
         format!("{}/{}", dir, stat_types[6]),
+    );
+    write_to_csv(
+        &container.stats.local_sent_migrations_in_turn,
+        format!("{}/{}", dir, stat_types[7]),
+    );
+    write_to_csv(
+        &container.stats.global_sent_migrations_in_turn,
+        format!("{}/{}", dir, stat_types[8]),
+    );
+    write_to_csv(
+        &container.stats.deads_in_turn,
+        format!("{}/{}", dir, stat_types[9]),
     );
 }
 
@@ -191,25 +206,7 @@ fn write_best_agent_csv(agent: &Agent, dir: String) {
     writeln!(file, "{}", agent).unwrap();
 }
 
-fn write_meetings_csv(num: &[u32], dir: String) {
-    let mut file = File::create(dir).unwrap();
-    let strings: Vec<String> = num.iter().map(|n| n.to_string()).collect();
-    writeln!(file, "{}", strings.join(",\n")).unwrap();
-}
-
-fn write_procreations_csv(num: &[u32], dir: String) {
-    let mut file = File::create(dir).unwrap();
-    let strings: Vec<String> = num.iter().map(|n| n.to_string()).collect();
-    writeln!(file, "{}", strings.join(",\n")).unwrap();
-}
-
-fn write_migrations_csv(num: &[u32], dir: String) {
-    let mut file = File::create(dir).unwrap();
-    let strings: Vec<String> = num.iter().map(|n| n.to_string()).collect();
-    writeln!(file, "{}", strings.join(",\n")).unwrap();
-}
-
-fn write_deads_csv(num: &[u32], dir: String) {
+fn write_to_csv(num: &[u32], dir: String) {
     let mut file = File::create(dir).unwrap();
     let strings: Vec<String> = num.iter().map(|n| n.to_string()).collect();
     writeln!(file, "{}", strings.join(",\n")).unwrap();

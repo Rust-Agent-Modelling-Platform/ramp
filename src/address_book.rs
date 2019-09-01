@@ -31,6 +31,7 @@ impl AddressBook {
 
     /// Tries to send [`Message`] to random island. If no island is active
     /// [`SendError`] with [`Message`] will be returned.
+    #[allow(unused_mut)]
     pub fn send_to_rnd(&mut self, msg: Message) -> Result<(), SendError<Message>> {
         match self.addresses.iter_mut().find(|&(_, (_, mut state))| state) {
             Some((_island_uuid, (tx, state))) => match tx.send(msg) {

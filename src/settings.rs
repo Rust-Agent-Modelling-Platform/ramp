@@ -40,10 +40,10 @@ pub struct AgentConfig {
 }
 
 impl Settings {
-    pub fn new(settings_file_name: String) -> Result<Self, ConfigError> {
+    pub fn new(file_name: String) -> Result<Self, ConfigError> {
         let mut settings = Config::new();
 
-        settings.merge(File::with_name(&settings_file_name))?;
+        settings.merge(File::with_name(&file_name))?;
         settings.try_into()
     }
 }

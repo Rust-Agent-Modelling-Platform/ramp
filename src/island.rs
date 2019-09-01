@@ -16,6 +16,8 @@ use crate::message::Message;
 use crate::settings::AgentConfig;
 use crate::stats;
 
+const LOCAL_MIGRATION_THRESHOLD: u32 = 50;
+
 struct IdQueues {
     pub dead_ids: Vec<Uuid>,
     pub meeting_ids: Vec<(Uuid, f64)>,
@@ -38,7 +40,10 @@ pub struct Stats {
     pub best_fitness_in_turn: Vec<f64>,
     pub meetings_in_turn: Vec<u32>,
     pub procreations_in_turn: Vec<u32>,
-    pub migrants_received_in_turn: Vec<u32>,
+    pub all_received_migrations_in_turn: Vec<u32>,
+    pub all_sent_migrations_in_turn: Vec<u32>,
+    pub local_sent_migrations_in_turn: Vec<u32>,
+    pub global_sent_migrations_in_turn: Vec<u32>,
     pub deads_in_turn: Vec<u32>,
 }
 
@@ -48,7 +53,10 @@ impl Stats {
             best_fitness_in_turn: vec![],
             meetings_in_turn: vec![],
             procreations_in_turn: vec![],
-            migrants_received_in_turn: vec![],
+            all_received_migrations_in_turn: vec![],
+            all_sent_migrations_in_turn: vec![],
+            local_sent_migrations_in_turn: vec![],
+            global_sent_migrations_in_turn: vec![],
             deads_in_turn: vec![],
         }
     }
@@ -239,35 +247,45 @@ impl Island {
             self.id_queues.migrating_ids.clear();
             return;
         }
+        let mut local_migrations_num = 0;
+        let mut global_migrations_num = 0;
         for id in &self.id_queues.migrating_ids {
             let prob = thread_rng().gen_range(0, 100);
-            if prob <= 50 {
-                match self.id_agent_map.remove(id) {
-                    Some(agent) => match self
-                        .address_book
-                        .send_to_rnd(Message::Agent(agent.into_inner()))
-                    {
-                        Ok(()) => (),
-                        Err(e) => match e.0 {
-                            Message::Agent(agent) => {
-                                self.id_agent_map.insert(*id, RefCell::new(agent));
-                            }
-                            _ => log::info!("Bad return message"),
-                        },
-                    },
-                    None => log::info!("No agent with id {}", id),
+            match self.id_agent_map.remove(id) {
+                Some(agent) => {
+                    if prob <= LOCAL_MIGRATION_THRESHOLD {
+                        match self
+                            .address_book
+                            .send_to_rnd(Message::Agent(agent.into_inner()))
+                        {
+                            Ok(()) => local_migrations_num += 1,
+                            Err(e) => match e.0 {
+                                Message::Agent(agent) => {
+                                    self.id_agent_map.insert(*id, RefCell::new(agent));
+                                }
+                                _ => log::info!("Bad return message"),
+                            },
+                        }
+                    } else {
+                        self.address_book
+                            .pub_rx
+                            .send(Message::Agent(agent.into_inner()))
+                            .unwrap();
+                        global_migrations_num += 1;
+                    }
                 }
-            } else {
-                match self.id_agent_map.remove(id) {
-                    Some(agent) => self
-                        .address_book
-                        .pub_rx
-                        .send(Message::Agent(agent.into_inner()))
-                        .unwrap(),
-                    None => log::warn!("No id in agent map, id: {}", id),
-                }
+                None => log::info!("No agent with id {}", id),
             }
         }
+        self.stats
+            .all_sent_migrations_in_turn
+            .push(local_migrations_num + global_migrations_num);
+        self.stats
+            .local_sent_migrations_in_turn
+            .push(local_migrations_num);
+        self.stats
+            .global_sent_migrations_in_turn
+            .push(global_migrations_num);
         self.id_queues.migrating_ids.clear();
     }
 
@@ -312,7 +330,9 @@ impl Island {
                 _ => log::error!("Unexpected msg"),
             }
         }
-        self.stats.migrants_received_in_turn.push(migrants_num);
+        self.stats
+            .all_received_migrations_in_turn
+            .push(migrants_num);
     }
 
     fn clear_action_queues(&mut self) {

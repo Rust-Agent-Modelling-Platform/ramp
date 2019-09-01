@@ -40,13 +40,14 @@ const HOST_READY_MSG: &str = "READY";
 
 fn main() -> Result<(), ConfigError> {
     init_logger();
-    let settings = load_settings();
+    let args: Vec<String> = parse_input_args();
+    let settings_file_name = args.get(1).unwrap().clone();
+    let settings = load_settings(settings_file_name.clone());
     let simulation_dir_path = stats::create_simulation_dir(constants::STATS_DIR_NAME);
     let agent_config = Arc::new(settings.agent_config);
     let (island_txes, island_rxes) = create_channels(settings.islands);
     let island_ids = create_island_ids(settings.islands);
-    let args: Vec<String> = env::args().collect();
-    stats::copy_simulation_settings(&simulation_dir_path, args.get(1).unwrap().clone());
+    stats::copy_simulation_settings(&simulation_dir_path, settings_file_name.clone());
 
     let ips: Vec<(IpAddr, Port)> = parse_input_ips(&settings);
     let context = zmq::Context::new();
@@ -84,10 +85,14 @@ fn main() -> Result<(), ConfigError> {
     Ok(())
 }
 
-fn load_settings() -> Settings {
+fn parse_input_args() -> Vec<String> {
     let args: Vec<String> = env::args().collect();
     assert_eq!(args.len(), 2);
-    Settings::new(args.get(1).unwrap().clone()).unwrap()
+    args
+}
+
+fn load_settings(file_name: String) -> Settings {
+    Settings::new(file_name).unwrap()
 }
 
 fn parse_input_ips(settings: &Settings) -> Vec<(IpAddr, Port)> {
@@ -158,10 +163,10 @@ fn wait_for_hosts(rep: &Socket, settings: &Settings) {
 }
 
 fn notify_hosts(publisher: &Socket) {
-    log::info!("Notyfing hosts");
+    log::info!("Notifying hosts");
     publisher
         .send(START_SIMULATION_KEY, 0)
-        .expect("couldn't notify hosts to start sim");
+        .expect("Couldn't notify hosts to start sim");
 }
 
 fn send_ready_msg(req: &Socket, settings: &Settings) {
