@@ -5,8 +5,16 @@ authors = ["Eric Cupiał <eric.cupial@gmail.com>", "Jacek Starz <jacek.starz@gma
 edition = "2018"
 
 [dependencies]
+zmq = "0.9"
 rand = "0.7"
-uuid = {version="0.7", features=["v4"]}
+uuid = { version = "0.7", features = ["v4", "serde"] }
 config = "0.9.3"
 serde_derive = "1.0.98"
-serde = "1.0.98"
+serde = { version = "1.0", features = ["derive", "rc"] }
+colored = "1.8.0"
+flexi_logger = "0.14.1"
+log = "0.4"
+chrono="0.4"
+csv="1.1"
+bincode = "1.1.4"
+
