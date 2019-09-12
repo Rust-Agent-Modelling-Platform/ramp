@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate serde_derive;
-
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::mpsc;
@@ -15,23 +12,13 @@ use rand::{thread_rng, Rng};
 use uuid::Uuid;
 use zmq::Socket;
 
-use agent::Agent;
-use settings::Settings;
-
-use crate::address_book::AddressBook;
-use crate::island::Island;
-use crate::message::Message;
-use crate::settings::AgentConfig;
-
-mod action;
-mod address_book;
-mod agent;
-mod constants;
-mod functions;
-mod island;
-mod message;
-mod settings;
-mod stats;
+use rust_in_peace::address_book::AddressBook;
+use rust_in_peace::agent::Agent;
+use rust_in_peace::island::Island;
+use rust_in_peace::message::Message;
+use rust_in_peace::settings::AgentConfig;
+use rust_in_peace::settings::Settings;
+use rust_in_peace::{constants, functions, stats};
 
 type Port = u32;
 
@@ -41,7 +28,7 @@ const HOST_READY_MSG: &str = "READY";
 fn main() -> Result<(), ConfigError> {
     init_logger();
     let args: Vec<String> = parse_input_args();
-    let settings_file_name = args.get(1).unwrap().clone();
+    let settings_file_name = args[1].clone();
     let settings = load_settings(settings_file_name.clone());
     let simulation_dir_path = stats::create_simulation_dir(constants::STATS_DIR_NAME);
     let agent_config = Arc::new(settings.agent_config);
@@ -267,7 +254,7 @@ fn start_publisher_thread(
                 Message::Agent(migrant) => {
                     let encoded: Vec<u8> = bincode::serialize(&migrant).unwrap();
                     let random_index = thread_rng().gen_range(0, ips.len());
-                    let (ip, port) = ips.get(random_index).unwrap();
+                    let (ip, port) = ips[random_index];
 
                     publisher
                         .send(

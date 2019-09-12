@@ -198,8 +198,8 @@ impl Island {
             let (id1, _) = self.id_queues.procreating_ids.pop().unwrap();
             let (id2, _) = self.id_queues.procreating_ids.pop().unwrap();
 
-            let mut agent1 = self.id_agent_map.get(&id1).unwrap().borrow_mut();
-            let mut agent2 = self.id_agent_map.get(&id2).unwrap().borrow_mut();
+            let mut agent1 = self.id_agent_map[&id1].borrow_mut();
+            let mut agent2 = self.id_agent_map[&id2].borrow_mut();
 
             let (uuid, new_agent) = agent1.procreate(&mut agent2);
             drop(agent1);
@@ -229,8 +229,8 @@ impl Island {
             let (id1, _) = self.id_queues.meeting_ids.pop().unwrap();
             let (id2, _) = self.id_queues.meeting_ids.pop().unwrap();
 
-            let mut agent1 = self.id_agent_map.get(&id1).unwrap().borrow_mut();
-            let mut agent2 = self.id_agent_map.get(&id2).unwrap().borrow_mut();
+            let mut agent1 = self.id_agent_map[&id1].borrow_mut();
+            let mut agent2 = self.id_agent_map[&id2].borrow_mut();
 
             agent1.meet(&mut agent2);
             meeting_num += 1;

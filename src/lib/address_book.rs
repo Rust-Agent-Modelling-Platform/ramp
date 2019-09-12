@@ -3,7 +3,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use uuid::Uuid;
 
-use crate::Message;
+use crate::message::Message;
 
 type State = bool;
 
