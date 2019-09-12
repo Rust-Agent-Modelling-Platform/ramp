@@ -13,7 +13,6 @@ use uuid::Uuid;
 use zmq::Socket;
 
 use rust_in_peace::address_book::AddressBook;
-use rust_in_peace::agent::Agent;
 use rust_in_peace::island::Island;
 use rust_in_peace::message::Message;
 use rust_in_peace::settings::AgentConfig;
@@ -21,9 +20,7 @@ use rust_in_peace::settings::Settings;
 use rust_in_peace::{constants, functions, stats};
 
 type Port = u32;
-
-const START_SIMULATION_KEY: &str = "START";
-const HOST_READY_MSG: &str = "READY";
+const SERVER_INFO_KEY: &str = "SERVER_INFO";
 
 fn main() -> Result<(), ConfigError> {
     init_logger();
@@ -49,7 +46,7 @@ fn main() -> Result<(), ConfigError> {
     if settings.network.is_coordinator {
         bind_rep_sock(&rep, &settings);
         wait_for_hosts(&rep, &settings);
-        notify_hosts(&publisher);
+        notify_hosts(&publisher, &settings);
     } else {
         connect_to_rep_sock(&req, &settings);
         send_ready_msg(&req, &settings);
@@ -114,7 +111,7 @@ fn subscribe(ips: &[(IpAddr, Port)], sub: &Socket, settings: &Settings) {
     );
     sub.set_subscribe(private_sub_key.as_bytes())
         .expect("failed seting sub key");
-    sub.set_subscribe(START_SIMULATION_KEY.as_bytes())
+    sub.set_subscribe(SERVER_INFO_KEY.as_bytes())
         .expect("failed seting sub key");
 }
 
@@ -142,37 +139,53 @@ fn wait_for_hosts(rep: &Socket, settings: &Settings) {
     let mut count = 0;
     while count != settings.network.hosts_num {
         let from = rep.recv_msg(0).unwrap();
-        let data = rep.recv_msg(0).unwrap();
-        log::info!("{} {}", data.as_str().unwrap(), from.as_str().unwrap());
-        rep.send("OK", 0).unwrap();
+        let msg = rep.recv_bytes(0).unwrap();
+
+        let d_msg: Message = bincode::deserialize(&msg).unwrap();
+        log::info!("{} {}", d_msg.into_string(), from.as_str().unwrap());
+
+        let self_ip = &settings.network.host_ip;
+        let self_port = settings.network.coordinator_rep_port;
+        let from = format!("{}:{}",self_ip, self_port).into_bytes();
+        let s_msg = bincode::serialize(&Message::Ok).unwrap();
+        rep.send(from, zmq::SNDMORE).unwrap();
+        rep.send(s_msg, 0).unwrap();
         count += 1;
     }
 }
 
-fn notify_hosts(publisher: &Socket) {
+fn notify_hosts(publisher: &Socket, settings: &Settings) {
     log::info!("Notifying hosts");
-    publisher
-        .send(START_SIMULATION_KEY, 0)
-        .expect("Couldn't notify hosts to start sim");
+    let key = SERVER_INFO_KEY.as_bytes();
+    let from = format!("{}:{}", settings.network.host_ip, settings.network.pub_port).into_bytes();
+    let msg = bincode::serialize(&Message::StartSim).unwrap();
+    publisher.send(key, zmq::SNDMORE).unwrap();
+    publisher.send(from, zmq::SNDMORE).unwrap();
+    publisher.send(msg, 0).unwrap();
 }
 
 fn send_ready_msg(req: &Socket, settings: &Settings) {
-    req.send(
-        format!("{}:{}", settings.network.host_ip, settings.network.pub_port).into_bytes(),
-        zmq::SNDMORE,
-    )
-    .unwrap();
-    req.send(&HOST_READY_MSG, 0).unwrap();
-    let msg = req.recv_msg(0).unwrap();
-    ;
-    log::info!("{}. Waiting for signal to start sim", msg.as_str().unwrap());
+    let self_ip = &settings.network.host_ip;
+    let self_port = settings.network.pub_port;
+    let from = format!("{}:{}", self_ip, self_port).into_bytes();
+    let msg = bincode::serialize(&Message::HostReady).unwrap();
+    req.send(from, zmq::SNDMORE).unwrap();
+    req.send(msg, 0).unwrap();
+
+    let _from = req.recv_msg(0).unwrap();
+    let msg = req.recv_bytes(0).unwrap();
+
+    let d_msg: Message = bincode::deserialize(&msg).unwrap();
+    log::info!("{}. Waiting for signal to start sim", d_msg.into_string());
 }
 
 fn wait_for_signal(sub: &Socket) {
-    let msg = sub
-        .recv_msg(0)
-        .expect("failed receiving signal to start sim");
-    log::info!("{}", std::str::from_utf8(&msg).unwrap());
+    let _key = sub.recv_msg(0).unwrap();
+    let _from = sub.recv_msg(0).unwrap();
+    let msg = sub.recv_bytes(0).unwrap();
+
+    let d_msg: Message = bincode::deserialize(&msg).unwrap();
+    log::info!("{}", d_msg.into_string());
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -245,35 +258,31 @@ fn start_publisher_thread(
     ips: Vec<(IpAddr, Port)>,
     settings: Settings,
 ) {
+    log::info!("Starting pub thread");
     let mut fin_sim = false;
+    let self_ip = settings.network.host_ip;
+    let self_port = settings.network.pub_port;
     while !fin_sim {
         let incoming = pub_rx.try_iter();
         for msg in incoming {
             match msg {
-                // 1. Agent migrating form this node -> some other node
-                Message::Agent(migrant) => {
-                    let encoded: Vec<u8> = bincode::serialize(&migrant).unwrap();
+                Message::Agent(_) => {
                     let random_index = thread_rng().gen_range(0, ips.len());
                     let (ip, port) = ips[random_index];
 
-                    publisher
-                        .send(
-                            &format!("{}:{}", ip.to_string(), port.to_string()),
-                            zmq::SNDMORE,
-                        )
-                        .expect("failed sending sub key");
-                    publisher
-                        .send(&format!("{}", settings.network.pub_port), zmq::SNDMORE)
-                        .expect("failed sending from msg");
-                    publisher.send(encoded, 0).expect("failed sending msg");
+                    let key = format!("{}:{}", ip.to_string(), port.to_string()).into_bytes();
+                    let from = format!("{}:{}", self_ip, self_port).into_bytes();
+                    let s_msg = bincode::serialize(&msg).unwrap();
+                    publisher.send(key, zmq::SNDMORE).unwrap();
+                    publisher.send(from, zmq::SNDMORE).unwrap();
+                    publisher.send(s_msg, 0).unwrap();
                 }
-
-                // 2. End of the simulation
                 Message::FinSim => {
-                    log::info!("Ending simulation in pub thread");
+                    log::info!("Finishing simulation in pub thread");
                     fin_sim = true;
                     break;
                 }
+                _ => log::warn!("Unexpected msg in pub thread"),
             }
         }
     }
@@ -295,7 +304,7 @@ fn start_subscriber_thread(
                     fin_sim = true;
                     break;
                 }
-                _ => log::info!("Unexpected message in sub_thread"),
+                _ => log::warn!("Unexpected message in sub thread"),
             }
         }
 
@@ -303,15 +312,13 @@ fn start_subscriber_thread(
         let mut items = [subscriber.as_poll_item(zmq::POLLIN)];
         zmq::poll(&mut items, -1).unwrap();
         if items[0].is_readable() {
-            let _sub_key = subscriber.recv_msg(0).expect("failed receiving sub key");
-            let _from = subscriber.recv_msg(0).expect("failed receiving from msg");
-            let message = subscriber.recv_msg(0).expect("failed receiving msg");
+            let _key = subscriber.recv_msg(0).unwrap();
+            let _from = subscriber.recv_msg(0).unwrap();
+            let msg = subscriber.recv_bytes(0).unwrap();
 
-            let decoded_agent: Agent =
-                bincode::deserialize(&message[..]).expect("ERROR DESERIALIZING AGENT");
+            let d_msg: Message = bincode::deserialize(&msg).unwrap();
 
-            //Get some random hash map value that is active. If no more active - drop agent
-            match address_book.send_to_rnd(Message::Agent(decoded_agent)) {
+            match address_book.send_to_rnd(d_msg) {
                 Ok(()) => (),
                 Err(e) => {
                     log::info!("{:?} (No more active islands in system)", e);
