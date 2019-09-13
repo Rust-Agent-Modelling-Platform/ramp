@@ -10,3 +10,4 @@ pub mod island;
 pub mod message;
 pub mod settings;
 pub mod stats;
+pub mod network;

@@ -18,6 +18,7 @@ use rust_in_peace::message::Message;
 use rust_in_peace::settings::AgentConfig;
 use rust_in_peace::settings::Settings;
 use rust_in_peace::{constants, functions, stats};
+use rust_in_peace::network;
 
 type Port = u32;
 const SERVER_INFO_KEY: &str = "SERVER_INFO";
@@ -40,15 +41,20 @@ fn main() -> Result<(), ConfigError> {
     let publisher = context.socket(zmq::PUB).unwrap();
     let sub = context.socket(zmq::SUB).unwrap();
 
-    bind_publisher(&publisher, &settings);
-    subscribe(&ips, &sub, &settings);
+    network::bind_sock(&publisher, settings.network.host_ip.clone(), settings.network.pub_port);
+    connect(&sub, &ips, );
+    subscribe(&sub, &settings);
 
     if settings.network.is_coordinator {
-        bind_rep_sock(&rep, &settings);
+        let ip = settings.network.coordinator_ip.clone();
+        let port = settings.network.coordinator_rep_port;
+        network::bind_sock(&rep, ip, port);
         wait_for_hosts(&rep, &settings);
         notify_hosts(&publisher, &settings);
     } else {
-        connect_to_rep_sock(&req, &settings);
+        let ip = settings.network.coordinator_ip.clone();
+        let port = settings.network.coordinator_rep_port;
+        network::connect_sock(&req, ip, port);
         send_ready_msg(&req, &settings);
         wait_for_signal(&sub);
     }
@@ -89,50 +95,19 @@ fn parse_input_ips(settings: &Settings) -> Vec<(IpAddr, Port)> {
     ips
 }
 
-fn bind_publisher(publisher: &Socket, settings: &Settings) {
-    publisher
-        .bind(&format!(
-            "tcp://{}:{}",
-            settings.network.host_ip.clone(),
-            settings.network.pub_port.to_string()
-        ))
-        .expect("failed binding pub");
+fn connect(sub: &Socket, ips: &[(IpAddr, Port)]) {
+    ips.iter()
+        .for_each(|(ip, port)| network::connect_sock(sub, ip.to_string(), *port));
 }
 
-fn subscribe(ips: &[(IpAddr, Port)], sub: &Socket, settings: &Settings) {
-    ips.iter().for_each(|(ip, port)| {
-        sub.connect(&format!("tcp://{}:{}", ip.to_string(), port.to_string()))
-            .expect("failed connecting sub");
-    });
-    let private_sub_key = &format!(
+fn subscribe(sub: &Socket, settings: &Settings) {
+    let private_sub_key = format!(
         "{}:{}",
         settings.network.host_ip.to_string(),
         settings.network.pub_port.to_string()
     );
-    sub.set_subscribe(private_sub_key.as_bytes())
-        .expect("failed seting sub key");
-    sub.set_subscribe(SERVER_INFO_KEY.as_bytes())
-        .expect("failed seting sub key");
-}
-
-fn bind_rep_sock(rep: &Socket, settings: &Settings) {
-    assert!(rep
-        .bind(&format!(
-            "tcp://{}:{}",
-            settings.network.host_ip.to_string(),
-            settings.network.coordinator_rep_port.to_string()
-        ))
-        .is_ok());
-}
-
-fn connect_to_rep_sock(req: &Socket, settings: &Settings) {
-    assert!(req
-        .connect(&format!(
-            "tcp://{}:{}",
-            settings.network.coordinator_ip.to_string(),
-            settings.network.coordinator_rep_port.to_string()
-        ))
-        .is_ok());
+    network::subscribe_sock(sub, private_sub_key);
+    network::subscribe_sock(sub, String::from(SERVER_INFO_KEY));
 }
 
 fn wait_for_hosts(rep: &Socket, settings: &Settings) {
@@ -146,46 +121,36 @@ fn wait_for_hosts(rep: &Socket, settings: &Settings) {
 
         let self_ip = &settings.network.host_ip;
         let self_port = settings.network.coordinator_rep_port;
-        let from = format!("{}:{}",self_ip, self_port).into_bytes();
-        let s_msg = bincode::serialize(&Message::Ok).unwrap();
-        rep.send(from, zmq::SNDMORE).unwrap();
-        rep.send(s_msg, 0).unwrap();
+        let from = format!("{}:{}",self_ip, self_port);
+        let msg = Message::Ok;
+        network::send1(rep, from, msg);
         count += 1;
     }
 }
 
 fn notify_hosts(publisher: &Socket, settings: &Settings) {
     log::info!("Notifying hosts");
-    let key = SERVER_INFO_KEY.as_bytes();
-    let from = format!("{}:{}", settings.network.host_ip, settings.network.pub_port).into_bytes();
-    let msg = bincode::serialize(&Message::StartSim).unwrap();
-    publisher.send(key, zmq::SNDMORE).unwrap();
-    publisher.send(from, zmq::SNDMORE).unwrap();
-    publisher.send(msg, 0).unwrap();
+    let key = String::from(SERVER_INFO_KEY);
+    let from = format!("{}:{}", settings.network.host_ip, settings.network.pub_port);
+    let msg = Message::StartSim;
+
+    network::send2(publisher, key, from, msg);
 }
 
 fn send_ready_msg(req: &Socket, settings: &Settings) {
     let self_ip = &settings.network.host_ip;
     let self_port = settings.network.pub_port;
-    let from = format!("{}:{}", self_ip, self_port).into_bytes();
-    let msg = bincode::serialize(&Message::HostReady).unwrap();
-    req.send(from, zmq::SNDMORE).unwrap();
-    req.send(msg, 0).unwrap();
+    let from = format!("{}:{}", self_ip, self_port);
+    let msg = Message::HostReady;
 
-    let _from = req.recv_msg(0).unwrap();
-    let msg = req.recv_bytes(0).unwrap();
-
-    let d_msg: Message = bincode::deserialize(&msg).unwrap();
-    log::info!("{}. Waiting for signal to start sim", d_msg.into_string());
+    network::send1(req, from, msg);
+    let (_, msg) = network::recv1(req);
+    log::info!("{}. Waiting for signal to start sim", msg.into_string());
 }
 
 fn wait_for_signal(sub: &Socket) {
-    let _key = sub.recv_msg(0).unwrap();
-    let _from = sub.recv_msg(0).unwrap();
-    let msg = sub.recv_bytes(0).unwrap();
-
-    let d_msg: Message = bincode::deserialize(&msg).unwrap();
-    log::info!("{}", d_msg.into_string());
+    let (_, _, msg) = network::recv2(sub);
+    log::info!("{}", msg.into_string());
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -269,13 +234,10 @@ fn start_publisher_thread(
                 Message::Agent(_) => {
                     let random_index = thread_rng().gen_range(0, ips.len());
                     let (ip, port) = ips[random_index];
+                    let key = format!("{}:{}", ip.to_string(), port.to_string());
+                    let from = format!("{}:{}", self_ip, self_port);
 
-                    let key = format!("{}:{}", ip.to_string(), port.to_string()).into_bytes();
-                    let from = format!("{}:{}", self_ip, self_port).into_bytes();
-                    let s_msg = bincode::serialize(&msg).unwrap();
-                    publisher.send(key, zmq::SNDMORE).unwrap();
-                    publisher.send(from, zmq::SNDMORE).unwrap();
-                    publisher.send(s_msg, 0).unwrap();
+                    network::send2(&publisher, key, from, msg);
                 }
                 Message::FinSim => {
                     log::info!("Finishing simulation in pub thread");
@@ -312,13 +274,8 @@ fn start_subscriber_thread(
         let mut items = [subscriber.as_poll_item(zmq::POLLIN)];
         zmq::poll(&mut items, -1).unwrap();
         if items[0].is_readable() {
-            let _key = subscriber.recv_msg(0).unwrap();
-            let _from = subscriber.recv_msg(0).unwrap();
-            let msg = subscriber.recv_bytes(0).unwrap();
-
-            let d_msg: Message = bincode::deserialize(&msg).unwrap();
-
-            match address_book.send_to_rnd(d_msg) {
+            let (_, _, msg) = network::recv2(&subscriber);
+            match address_book.send_to_rnd(msg) {
                 Ok(()) => (),
                 Err(e) => {
                     log::info!("{:?} (No more active islands in system)", e);
