@@ -110,7 +110,7 @@ impl Agent {
         }
     }
 
-    pub fn into_string(&self) -> String {
+    pub fn as_string(&self) -> String {
         format!(
             "Agent {{\n id: {},\n energy: {},\n genotype: {:#?},\n fitness: {}\n}}",
             self.id, self.energy, self.genotype, self.fitness
@@ -120,6 +120,6 @@ impl Agent {
 
 impl fmt::Display for Agent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.into_string())
+        write!(f, "{}", self.as_string())
     }
 }

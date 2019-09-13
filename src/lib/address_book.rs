@@ -13,19 +13,19 @@ pub struct SendError<Message>(pub Message);
 pub struct AddressBook {
     pub self_rx: Receiver<Message>,
     pub addresses: HashMap<Uuid, (Sender<Message>, State)>,
-    pub pub_rx: Sender<Message>,
+    pub pub_tx: Sender<Message>,
 }
 
 impl AddressBook {
     pub fn new(
         self_rx: Receiver<Message>,
         addresses: HashMap<Uuid, (Sender<Message>, State)>,
-        pub_rx: Sender<Message>,
+        pub_tx: Sender<Message>,
     ) -> AddressBook {
         AddressBook {
             self_rx,
             addresses,
-            pub_rx,
+            pub_tx,
         }
     }
 
@@ -43,6 +43,13 @@ impl AddressBook {
             },
             None => Err(SendError(msg)),
         }
+    }
+
+    pub fn send_to_all(&mut self, msg: Message) {
+        self.addresses
+            .iter()
+            .filter(|&(_, (_, state))| *state)
+            .for_each(|(_, (tx, _))| tx.send(msg.clone()).unwrap());
     }
 }
 
@@ -65,7 +72,7 @@ mod tests {
         let mut address_book: AddressBook = AddressBook {
             self_rx: rx,
             addresses,
-            pub_rx: tx.clone(),
+            pub_tx: tx.clone(),
         };
         match address_book.send_to_rnd(Message::FinSim) {
             Ok(()) => Ok(()),
@@ -81,7 +88,7 @@ mod tests {
         let mut address_book: AddressBook = AddressBook {
             self_rx: rx,
             addresses,
-            pub_rx: tx.clone(),
+            pub_tx: tx.clone(),
         };
         match address_book.send_to_rnd(Message::FinSim) {
             Ok(()) => Err(String::from("send_to_rnd")),
@@ -98,7 +105,7 @@ mod tests {
         let mut address_book: AddressBook = AddressBook {
             self_rx: rx_stub,
             addresses,
-            pub_rx: tx.clone(),
+            pub_tx: tx.clone(),
         };
         drop(rx);
         match address_book.send_to_rnd(Message::FinSim) {

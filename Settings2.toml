@@ -1,5 +1,5 @@
 turns = 400
-islands = 2
+islands = 10
 islands_sync = true
 
 [network]
@@ -10,6 +10,12 @@ coordinator_rep_port = 4002
 host_ip = "127.0.0.1"
 pub_port = 6002
 ips = ["127.0.0.1:6005", "127.0.0.1:5008"]
+
+[network.global_sync]
+sync = true
+server_ip = "127.0.0.1"
+server_rep_port = 7001
+server_pub_port = 7002
 
 [island]
 agents_number = 50

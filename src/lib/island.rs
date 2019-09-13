@@ -14,7 +14,7 @@ use crate::address_book::AddressBook;
 use crate::agent::Agent;
 use crate::message::Message;
 use crate::settings::AgentConfig;
-use crate::stats;
+use crate::{message, stats};
 
 const LOCAL_MIGRATION_THRESHOLD: u32 = 50;
 
@@ -127,6 +127,68 @@ impl Island {
             };
         }
         self.finish(start_time);
+    }
+
+    pub fn run_with_global_sync(&mut self) {
+        log::info!("Run with global Sync");
+        let start_time = Instant::now();
+
+        loop {
+            let current_turn = self.receive_messages_with_global_sync();
+            if current_turn == 0 {
+                break;
+            }
+            self.log_turn_start(current_turn);
+            self.clear_action_queues();
+            self.create_action_queues();
+            self.resolve_migrations();
+            self.resolve_procreations();
+            self.resolve_meetings();
+            self.resolve_deads();
+
+            self.log_turn_end_and_update_best_agent();
+            self.address_book.pub_tx.send(Message::TurnDone).unwrap();
+        }
+        self.finish(start_time);
+    }
+
+    /// This method is waiting for ['Message::NexTurn(turn_number)'] msg.
+    /// Until it is received each other msg (except ['Message::FinSim'])
+    /// is pushed to queue and is proceed after receiving NextTurn msg.
+    /// Method returns current turn number if NextTurn msg is received or
+    /// 0 in other case.
+    fn receive_messages_with_global_sync(&mut self) -> message::TurnNumber {
+        let mut msg_queue = vec![];
+        let mut next_turn = false;
+        let mut fin_sim = false;
+        let mut current_turn = 0;
+        while !next_turn && !fin_sim {
+            let messages = self.address_book.self_rx.try_iter();
+            for msg in messages {
+                match msg {
+                    Message::NextTurn(turn_number) => {
+                        current_turn = turn_number;
+                        next_turn = true
+                    }
+                    Message::FinSim => fin_sim = true,
+                    _ => msg_queue.push(msg),
+                }
+            }
+        }
+        let mut migrants_num = 0;
+        for msg in msg_queue {
+            match msg {
+                Message::Agent(migrant) => {
+                    migrants_num += 1;
+                    self.id_agent_map.insert(migrant.id, RefCell::new(migrant));
+                }
+                _ => log::error!("Unexpected msg {:#?}", msg),
+            }
+        }
+        self.stats
+            .all_received_migrations_in_turn
+            .push(migrants_num);
+        current_turn
     }
 
     fn log_turn_start(&self, turn_number: u32) {
@@ -268,7 +330,7 @@ impl Island {
                         }
                     } else {
                         self.address_book
-                            .pub_rx
+                            .pub_tx
                             .send(Message::Agent(agent.into_inner()))
                             .unwrap();
                         global_migrations_num += 1;

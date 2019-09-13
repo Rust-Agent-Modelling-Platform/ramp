@@ -1,6 +1,6 @@
 use chrono::{Datelike, Local, Timelike};
-use std::fs;
 use std::fs::File;
+use std::{fs, string};
 use uuid::Uuid;
 
 use std::cell::RefCell;
@@ -197,7 +197,7 @@ fn write_time_csv(seconds: u64, dir: String) {
 
 fn write_fitness_csv(ids: &[f64], dir: String) {
     let mut file = File::create(dir).unwrap();
-    let strings: Vec<String> = ids.iter().map(|n| n.to_string()).collect();
+    let strings: Vec<String> = ids.iter().map(string::ToString::to_string).collect();
     writeln!(file, "{}", strings.join(",\n")).unwrap();
 }
 
@@ -208,6 +208,6 @@ fn write_best_agent_csv(agent: &Agent, dir: String) {
 
 fn write_to_csv(num: &[u32], dir: String) {
     let mut file = File::create(dir).unwrap();
-    let strings: Vec<String> = num.iter().map(|n| n.to_string()).collect();
+    let strings: Vec<String> = num.iter().map(string::ToString::to_string).collect();
     writeln!(file, "{}", strings.join(",\n")).unwrap();
 }

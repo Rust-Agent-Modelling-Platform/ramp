@@ -3,11 +3,10 @@ use std::net::IpAddr;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Barrier};
-use std::{env, thread};
+use std::thread;
 
 use config;
 use config::ConfigError;
-use flexi_logger::Logger;
 use rand::{thread_rng, Rng};
 use uuid::Uuid;
 use zmq::Socket;
@@ -15,17 +14,19 @@ use zmq::Socket;
 use rust_in_peace::address_book::AddressBook;
 use rust_in_peace::island::Island;
 use rust_in_peace::message::Message;
-use rust_in_peace::settings::AgentConfig;
-use rust_in_peace::settings::Settings;
-use rust_in_peace::{constants, functions, stats};
 use rust_in_peace::network;
+use rust_in_peace::settings::AgentConfig;
+use rust_in_peace::settings::ClientSettings;
+use rust_in_peace::{constants, functions, stats, utils};
 
 type Port = u32;
-const SERVER_INFO_KEY: &str = "SERVER_INFO";
+
+const LOGGER_LEVEL: &str = "info";
+const EXPECTED_ARGS_NUM: usize = 2;
 
 fn main() -> Result<(), ConfigError> {
-    init_logger();
-    let args: Vec<String> = parse_input_args();
+    utils::init_logger(LOGGER_LEVEL);
+    let args: Vec<String> = utils::parse_input_args(EXPECTED_ARGS_NUM);
     let settings_file_name = args[1].clone();
     let settings = load_settings(settings_file_name.clone());
     let simulation_dir_path = stats::create_simulation_dir(constants::STATS_DIR_NAME);
@@ -36,27 +37,40 @@ fn main() -> Result<(), ConfigError> {
 
     let ips: Vec<(IpAddr, Port)> = parse_input_ips(&settings);
     let context = zmq::Context::new();
-    let rep = context.socket(zmq::REP).unwrap();
-    let req = context.socket(zmq::REQ).unwrap();
-    let publisher = context.socket(zmq::PUB).unwrap();
-    let sub = context.socket(zmq::SUB).unwrap();
+    let rep_sock = context.socket(zmq::REP).unwrap();
+    let req_sock = context.socket(zmq::REQ).unwrap();
+    let s_req_sock = context.socket(zmq::REQ).unwrap();
+    let pub_sock = context.socket(zmq::PUB).unwrap();
+    let sub_sock = context.socket(zmq::SUB).unwrap();
 
-    network::bind_sock(&publisher, settings.network.host_ip.clone(), settings.network.pub_port);
-    connect(&sub, &ips, );
-    subscribe(&sub, &settings);
+    let host_ip = settings.network.host_ip.clone();
+    let host_pub_port = settings.network.pub_port;
+    network::bind_sock(&pub_sock, host_ip, host_pub_port);
+    connect(&sub_sock, &ips);
+    subscribe(&sub_sock, &settings);
 
     if settings.network.is_coordinator {
-        let ip = settings.network.coordinator_ip.clone();
-        let port = settings.network.coordinator_rep_port;
-        network::bind_sock(&rep, ip, port);
-        wait_for_hosts(&rep, &settings);
-        notify_hosts(&publisher, &settings);
+        let coord_ip = settings.network.coordinator_ip.clone();
+        let coord_rep_port = settings.network.coordinator_rep_port;
+        network::bind_sock(&rep_sock, coord_ip, coord_rep_port);
+        wait_for_hosts(&rep_sock, &settings);
+        notify_hosts(&pub_sock, &settings);
     } else {
-        let ip = settings.network.coordinator_ip.clone();
-        let port = settings.network.coordinator_rep_port;
-        network::connect_sock(&req, ip, port);
-        send_ready_msg(&req, &settings);
-        wait_for_signal(&sub);
+        let coord_ip = settings.network.coordinator_ip.clone();
+        let coord_rep_port = settings.network.coordinator_rep_port;
+        network::connect_sock(&req_sock, coord_ip, coord_rep_port);
+        send_ready_msg(&req_sock, &settings);
+        wait_for_signal(&sub_sock);
+    }
+
+    if settings.network.global_sync.sync {
+        let server_ip = settings.network.global_sync.server_ip.clone();
+        let server_rep_port = settings.network.global_sync.server_rep_port;
+        let server_pub_port = settings.network.global_sync.server_pub_port;
+        network::connect_sock(&s_req_sock, server_ip.clone(), server_rep_port);
+        network::connect_sock(&sub_sock, server_ip, server_pub_port);
+        network::subscribe_sock(&sub_sock, String::from(network::SERVER_INFO_KEY));
+        send_ready_msg(&s_req_sock, &settings);
     }
 
     log::info!("Begin simulation");
@@ -67,25 +81,20 @@ fn main() -> Result<(), ConfigError> {
         island_rxes,
         island_ids,
         simulation_dir_path,
-        sub,
-        publisher,
+        sub_sock,
+        pub_sock,
         ips,
+        s_req_sock,
     );
 
     Ok(())
 }
 
-fn parse_input_args() -> Vec<String> {
-    let args: Vec<String> = env::args().collect();
-    assert_eq!(args.len(), 2);
-    args
+fn load_settings(file_name: String) -> ClientSettings {
+    ClientSettings::new(file_name).unwrap()
 }
 
-fn load_settings(file_name: String) -> Settings {
-    Settings::new(file_name).unwrap()
-}
-
-fn parse_input_ips(settings: &Settings) -> Vec<(IpAddr, Port)> {
+fn parse_input_ips(settings: &ClientSettings) -> Vec<(IpAddr, Port)> {
     let mut ips: Vec<(IpAddr, Port)> = Vec::new();
     let ips_str: Vec<String> = settings.network.ips.clone();
     for address in ips_str {
@@ -100,62 +109,60 @@ fn connect(sub: &Socket, ips: &[(IpAddr, Port)]) {
         .for_each(|(ip, port)| network::connect_sock(sub, ip.to_string(), *port));
 }
 
-fn subscribe(sub: &Socket, settings: &Settings) {
+fn subscribe(sub: &Socket, settings: &ClientSettings) {
     let private_sub_key = format!(
         "{}:{}",
         settings.network.host_ip.to_string(),
         settings.network.pub_port.to_string()
     );
     network::subscribe_sock(sub, private_sub_key);
-    network::subscribe_sock(sub, String::from(SERVER_INFO_KEY));
+    network::subscribe_sock(sub, String::from(network::COORD_INFO_KEY));
 }
 
-fn wait_for_hosts(rep: &Socket, settings: &Settings) {
+fn wait_for_hosts(rep: &Socket, settings: &ClientSettings) {
     let mut count = 0;
     while count != settings.network.hosts_num {
         let from = rep.recv_msg(0).unwrap();
         let msg = rep.recv_bytes(0).unwrap();
 
         let d_msg: Message = bincode::deserialize(&msg).unwrap();
-        log::info!("{} {}", d_msg.into_string(), from.as_str().unwrap());
+        log::info!("{} {}", d_msg.as_string(), from.as_str().unwrap());
 
-        let self_ip = &settings.network.host_ip;
-        let self_port = settings.network.coordinator_rep_port;
-        let from = format!("{}:{}",self_ip, self_port);
+        let from = settings.network.host_ip.clone();
         let msg = Message::Ok;
-        network::send1(rep, from, msg);
+        network::send_rr(rep, from, msg);
         count += 1;
     }
 }
 
-fn notify_hosts(publisher: &Socket, settings: &Settings) {
+fn notify_hosts(publisher: &Socket, settings: &ClientSettings) {
     log::info!("Notifying hosts");
-    let key = String::from(SERVER_INFO_KEY);
-    let from = format!("{}:{}", settings.network.host_ip, settings.network.pub_port);
+    let key = String::from(network::COORD_INFO_KEY);
+    let from = settings.network.host_ip.clone();
     let msg = Message::StartSim;
 
-    network::send2(publisher, key, from, msg);
+    network::send_ps(publisher, key, from, msg);
 }
 
-fn send_ready_msg(req: &Socket, settings: &Settings) {
-    let self_ip = &settings.network.host_ip;
-    let self_port = settings.network.pub_port;
-    let from = format!("{}:{}", self_ip, self_port);
+fn send_ready_msg(req: &Socket, settings: &ClientSettings) {
+    log::info!("Sending host ready message");
+    let from = settings.network.host_ip.clone();
     let msg = Message::HostReady;
 
-    network::send1(req, from, msg);
-    let (_, msg) = network::recv1(req);
-    log::info!("{}. Waiting for signal to start sim", msg.into_string());
+    network::send_rr(req, from, msg);
+    let (_, msg) = network::recv_rr(req);
+    log::info!("{}", msg.as_string());
 }
 
 fn wait_for_signal(sub: &Socket) {
-    let (_, _, msg) = network::recv2(sub);
-    log::info!("{}", msg.into_string());
+    log::info!("Waiting for signal to start sim");
+    let (_, _, msg) = network::recv_ps(sub);
+    log::info!("{}", msg.as_string());
 }
 
 #[allow(clippy::too_many_arguments)]
 fn start_simulation(
-    settings: Settings,
+    settings: ClientSettings,
     agent_config: Arc<AgentConfig>,
     island_txes: Vec<Sender<Message>>,
     mut island_rxes: Vec<Receiver<Message>>,
@@ -164,6 +171,7 @@ fn start_simulation(
     subscriber: Socket,
     publisher: Socket,
     ips: Vec<(IpAddr, Port)>,
+    s_req: Socket,
 ) {
     let mut threads = Vec::<thread::JoinHandle<_>>::new();
 
@@ -199,34 +207,41 @@ fn start_simulation(
             islands_sync.clone(),
         );
 
-        threads.push(thread::spawn(move || {
-            island.run();
-        }));
+        let th_handler = if settings.network.global_sync.sync {
+            thread::spawn(move || island.run_with_global_sync())
+        } else {
+            thread::spawn(move || island.run())
+        };
+        threads.push(th_handler);
     }
 
     let sub_th_address_book =
         create_address_book(&island_txes, &mut island_rxes, &island_ids, -1, &pub_tx);
-    thread::spawn(move || start_publisher_thread(pub_rx, publisher, ips, settings));
-    thread::spawn(move || start_subscriber_thread(sub_rx, subscriber, sub_th_address_book));
+    let settings_copy = settings.clone();
+    thread::spawn(move || start_sender_thread(pub_rx, publisher, ips, settings_copy, s_req));
+    thread::spawn(move || start_receiver_thread(sub_rx, subscriber, sub_th_address_book));
 
     for thread in threads {
         thread.join().unwrap();
     }
 
-    pub_tx.send(Message::FinSim).unwrap();
-    sub_tx.send(Message::FinSim).unwrap();
+    if !settings.network.global_sync.sync {
+        pub_tx.send(Message::FinSim).unwrap();
+        sub_tx.send(Message::FinSim).unwrap();
+    }
 }
 
-fn start_publisher_thread(
+fn start_sender_thread(
     pub_rx: Receiver<Message>,
     publisher: Socket,
     ips: Vec<(IpAddr, Port)>,
-    settings: Settings,
+    settings: ClientSettings,
+    s_req: Socket,
 ) {
-    log::info!("Starting pub thread");
+    log::info!("Starting sender thread");
     let mut fin_sim = false;
-    let self_ip = settings.network.host_ip;
-    let self_port = settings.network.pub_port;
+    let mut confirmations = 0;
+    let from = settings.network.host_ip;
     while !fin_sim {
         let incoming = pub_rx.try_iter();
         for msg in incoming {
@@ -235,62 +250,72 @@ fn start_publisher_thread(
                     let random_index = thread_rng().gen_range(0, ips.len());
                     let (ip, port) = ips[random_index];
                     let key = format!("{}:{}", ip.to_string(), port.to_string());
-                    let from = format!("{}:{}", self_ip, self_port);
 
-                    network::send2(&publisher, key, from, msg);
+                    network::send_ps(&publisher, key, from.clone(), msg);
+                }
+                Message::TurnDone => {
+                    confirmations += 1;
+                    if confirmations == settings.islands {
+                        network::send_rr(&s_req, from.clone(), Message::TurnDone);
+                        let (_, _) = network::recv_rr(&s_req);
+                        confirmations = 0;
+                    }
                 }
                 Message::FinSim => {
-                    log::info!("Finishing simulation in pub thread");
+                    log::info!("Finishing simulation in sender thread");
                     fin_sim = true;
                     break;
                 }
-                _ => log::warn!("Unexpected msg in pub thread"),
+                _ => log::warn!("Unexpected msg in sender thread {:#?}", msg),
             }
         }
     }
+    log::info!("Sender thread finished")
 }
 
-fn start_subscriber_thread(
-    rx: Receiver<Message>,
-    subscriber: Socket,
-    mut address_book: AddressBook,
-) {
-    log::info!("Starting sub thread");
+fn start_receiver_thread(rx: Receiver<Message>, sub_sock: Socket, mut address_book: AddressBook) {
+    log::info!("Starting receiver thread");
     let mut fin_sim = false;
     while !fin_sim {
         let incoming = rx.try_iter();
         for msg in incoming {
             match msg {
                 Message::FinSim => {
-                    log::info!("Ending simulation in network receiver thread");
+                    log::info!("Finishing simulation in receiver thread");
+                    address_book.send_to_all(msg);
                     fin_sim = true;
                     break;
                 }
-                _ => log::warn!("Unexpected message in sub thread"),
+                _ => log::warn!("Unexpected message in receiver thread {:#?}", msg),
             }
         }
 
         //Next step: non-blocking check if there are any new agents waiting to be added to our system
-        let mut items = [subscriber.as_poll_item(zmq::POLLIN)];
+        let mut items = [sub_sock.as_poll_item(zmq::POLLIN)];
         zmq::poll(&mut items, -1).unwrap();
         if items[0].is_readable() {
-            let (_, _, msg) = network::recv2(&subscriber);
-            match address_book.send_to_rnd(msg) {
-                Ok(()) => (),
-                Err(e) => {
-                    log::info!("{:?} (No more active islands in system)", e);
+            let (_, _, msg) = network::recv_ps(&sub_sock);
+            match msg {
+                Message::NextTurn(_) => {
+                    address_book.send_to_all(msg);
                 }
+                Message::FinSim => {
+                    log::info!("Finishing simulation in receiver thread");
+                    address_book.send_to_all(msg.clone());
+                    address_book.pub_tx.send(msg).unwrap();
+                    break;
+                }
+                Message::Agent(_) => match address_book.send_to_rnd(msg) {
+                    Ok(()) => (),
+                    Err(e) => {
+                        log::info!("{:?} (No more active islands in system)", e);
+                    }
+                },
+                _ => log::warn!("Unexpected message in receiver thread {:#?}", msg),
             }
         }
     }
-    log::info!("Finishing sub thread");
-}
-
-fn init_logger() {
-    Logger::with_str("info")
-        .format_for_stderr(flexi_logger::colored_default_format)
-        .start()
-        .unwrap();
+    log::info!("Receiver thread finished");
 }
 
 fn create_channels(islands_number: u32) -> (Vec<Sender<Message>>, Vec<Receiver<Message>>) {
