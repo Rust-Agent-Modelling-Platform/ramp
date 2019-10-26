@@ -8,6 +8,7 @@ pub struct ClientSettings {
     pub island: Island,
     pub islands_sync: bool,
     pub agent_config: AgentConfig,
+    pub stats_path: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]

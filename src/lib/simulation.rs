@@ -11,7 +11,7 @@ use rand::{Rng, thread_rng};
 use uuid::Uuid;
 use zmq::Socket;
 
-use crate::{constants, network, utils};
+use crate::{network, utils};
 use crate::address_book::AddressBook;
 use crate::island::{IslandEnv, IslandFactory};
 use crate::message::Message;
@@ -30,7 +30,7 @@ impl Simulation {
         let args: Vec<String> = utils::parse_input_args(EXPECTED_ARGS_NUM);
         let settings_file_name = args[1].clone();
         let settings = load_settings(settings_file_name.clone());
-        let simulation_dir_path = utils::create_simulation_dir(constants::STATS_DIR_NAME);
+        let simulation_dir_path = utils::create_simulation_dir(&settings.stats_path.clone());
         let (island_txes, island_rxes) = create_channels(settings.islands);
         let island_ids = create_island_ids(settings.islands);
         utils::copy_simulation_settings(&simulation_dir_path, settings_file_name.clone());

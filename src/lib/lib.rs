@@ -2,7 +2,6 @@
 extern crate serde_derive;
 
 pub mod address_book;
-pub mod constants;
 pub mod message;
 pub mod network;
 pub mod settings;
