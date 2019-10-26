@@ -4,7 +4,7 @@ pub type TurnNumber = u32;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Message {
-    Agent(Agent),
+    Agent(Vec<u8>),
     StartSim,
     FinSim,
     HostReady,
@@ -16,7 +16,7 @@ pub enum Message {
 impl Message {
     pub fn as_string(&self) -> String {
         match self {
-            Message::Agent(agent) => agent.as_string(),
+            Message::Agent(agent_vec) => format!("{:#?}", agent_vec),
             Message::StartSim => String::from("START SIM"),
             Message::FinSim => String::from("FIN SIM"),
             Message::HostReady => String::from("HOST READY"),

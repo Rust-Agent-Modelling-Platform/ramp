@@ -176,8 +176,9 @@ impl MyIsland {
         for msg in msg_queue {
             match msg {
                 Message::Agent(migrant) => {
+                    let d_migrant: Agent = bincode::deserialize(&migrant).unwrap();
                     migrants_num += 1;
-                    self.id_agent_map.insert(migrant.id, RefCell::new(migrant));
+                    self.id_agent_map.insert(d_migrant.id, RefCell::new(d_migrant));
                 }
                 _ => log::error!("Unexpected msg {:#?}", msg),
             }
@@ -312,16 +313,18 @@ impl MyIsland {
             let prob = thread_rng().gen_range(0, 100);
             match self.id_agent_map.remove(id) {
                 Some(agent) => {
+                    let s_agent = bincode::serialize(&agent.into_inner()).unwrap();
                     if prob <= LOCAL_MIGRATION_THRESHOLD {
                         match self
                             .island_env
                             .address_book
-                            .send_to_rnd(Message::Agent(agent.into_inner()))
+                            .send_to_rnd(Message::Agent(s_agent))
                         {
                             Ok(()) => local_migrations_num += 1,
                             Err(e) => match e.0 {
-                                Message::Agent(agent) => {
-                                    self.id_agent_map.insert(*id, RefCell::new(agent));
+                                Message::Agent(s_agent) => {
+                                    let d_agent: Agent = bincode::deserialize(&s_agent).unwrap();
+                                    self.id_agent_map.insert(*id, RefCell::new(d_agent));
                                 }
                                 _ => log::info!("Bad return message"),
                             },
@@ -330,7 +333,7 @@ impl MyIsland {
                         self.island_env
                             .address_book
                             .pub_tx
-                            .send(Message::Agent(agent.into_inner()))
+                            .send(Message::Agent(s_agent))
                             .unwrap();
                         global_migrations_num += 1;
                     }
@@ -386,7 +389,8 @@ impl MyIsland {
             match message {
                 Message::Agent(migrant) => {
                     migrants_num += 1;
-                    self.id_agent_map.insert(migrant.id, RefCell::new(migrant));
+                    let d_migrant: Agent = bincode::deserialize(&migrant).unwrap();
+                    self.id_agent_map.insert(d_migrant.id, RefCell::new(d_migrant));
                 }
                 _ => log::error!("Unexpected msg"),
             }
