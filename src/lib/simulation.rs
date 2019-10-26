@@ -31,8 +31,6 @@ impl Simulation {
         let settings_file_name = args[1].clone();
         let settings = load_settings(settings_file_name.clone());
         let simulation_dir_path = utils::create_simulation_dir(&settings.stats_path.clone());
-        let (island_txes, island_rxes) = create_channels(settings.islands);
-        let island_ids = create_island_ids(settings.islands);
         utils::copy_simulation_settings(&simulation_dir_path, settings_file_name.clone());
 
         let ips: Vec<(IpAddr, Port)> = parse_input_ips(&settings);
@@ -76,9 +74,6 @@ impl Simulation {
         log::info!("Begin simulation");
         start_simulation(
             settings,
-            island_txes,
-            island_rxes,
-            island_ids,
             simulation_dir_path,
             sub_sock,
             pub_sock,
@@ -162,9 +157,6 @@ fn wait_for_signal(sub: &Socket) {
 #[allow(clippy::too_many_arguments)]
 fn start_simulation(
     settings: ClientSettings,
-    island_txes: Vec<Sender<Message>>,
-    mut island_rxes: Vec<Receiver<Message>>,
-    island_ids: Vec<Uuid>,
     simulation_dir_path: String,
     subscriber: Socket,
     publisher: Socket,
@@ -172,6 +164,8 @@ fn start_simulation(
     s_req: Socket,
     factory: Box<dyn IslandFactory>,
 ) {
+    let (island_txes, mut island_rxes) = create_channels(settings.islands);
+    let island_ids = create_island_ids(settings.islands);
     let mut threads = Vec::<thread::JoinHandle<_>>::new();
 
     let (sub_tx, sub_rx) = mpsc::channel();
