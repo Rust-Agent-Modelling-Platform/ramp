@@ -6,7 +6,7 @@ use uuid::Uuid;
 use std::cell::RefCell;
 use std::io::prelude::*;
 
-use rust_in_peace::agent::Agent;
+use crate::agent::Agent;
 use crate::myisland::MyIsland;
 
 // =================================== Info-generating methods =========================================================

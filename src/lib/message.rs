@@ -1,5 +1,3 @@
-use crate::agent::Agent;
-
 pub type TurnNumber = u32;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

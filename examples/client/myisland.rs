@@ -9,9 +9,9 @@ use colored::*;
 use rand::{thread_rng, Rng};
 use uuid::Uuid;
 
-use rust_in_peace::action::Action;
+use crate::action::Action;
 use rust_in_peace::address_book::AddressBook;
-use rust_in_peace::agent::Agent;
+use crate::agent::Agent;
 use rust_in_peace::message::Message;
 use rust_in_peace::settings::AgentConfig;
 use rust_in_peace::message;

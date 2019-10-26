@@ -1,15 +1,21 @@
+#[macro_use]
+extern crate serde_derive;
+
 use std::sync::{Arc, Barrier};
 
 use uuid::Uuid;
 
-use rust_in_peace::{functions, utils};
-use rust_in_peace::island::{Island, IslandEnv, IslandFactory};
-use rust_in_peace::settings::ClientSettings;
-use rust_in_peace::simulation::Simulation;
 use crate::myisland::MyIsland;
+use rust_in_peace::island::{IslandFactory, IslandEnv, Island};
+use rust_in_peace::utils;
+use rust_in_peace::simulation::Simulation;
+use rust_in_peace::settings::ClientSettings;
 
 mod myisland;
 mod stats;
+mod functions;
+mod action;
+mod agent;
 
 const EXPECTED_ARGS_NUM: usize = 2;
 

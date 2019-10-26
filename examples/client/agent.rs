@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::action::Action;
 use crate::functions;
-use crate::settings::AgentConfig;
+use rust_in_peace::settings::AgentConfig;
 use std::cell::RefCell;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
