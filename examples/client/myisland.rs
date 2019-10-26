@@ -13,10 +13,10 @@ use crate::action::Action;
 use rust_in_peace::address_book::AddressBook;
 use crate::agent::Agent;
 use rust_in_peace::message::Message;
-use rust_in_peace::settings::AgentConfig;
 use rust_in_peace::message;
 use rust_in_peace::island::{Island, IslandEnv};
 use crate::stats;
+use crate::settings::AgentSettings;
 
 const LOCAL_MIGRATION_THRESHOLD: u32 = 50;
 
@@ -69,7 +69,7 @@ pub struct MyIsland {
     pub id_agent_map: HashMap<Uuid, RefCell<Agent>>,
     pub turn_number: u64,
     pub action_queue: Vec<Action>,
-    pub agent_config: AgentConfig,
+    pub agent_settings: AgentSettings,
     pub stats: Stats,
     turns: u32,
     island_env: IslandEnv,
@@ -130,19 +130,19 @@ impl MyIsland {
         calculate_fitness: &dyn Fn(&[f64]) -> f64,
         agents_number: u32,
         turns: u32,
-        agent_config: AgentConfig,
+        agent_settings: AgentSettings,
     ) -> Self {
         MyIsland {
             id,
             id_agent_map: MyIsland::create_id_agent_map(
                 agents_number,
-                &agent_config,
+                &agent_settings,
                 calculate_fitness,
             ),
             turn_number: 0,
             action_queue: Vec::new(),
             turns,
-            agent_config,
+            agent_settings,
             island_env,
             id_queues: IdQueues::new(),
             stats: Stats::new(),
@@ -406,7 +406,7 @@ impl MyIsland {
 
     fn create_id_agent_map(
         agents_number: u32,
-        agent_config: &AgentConfig,
+        agent_config: &AgentSettings,
         calculate_fitness: &dyn Fn(&[f64]) -> f64,
     ) -> HashMap<Uuid, RefCell<Agent>> {
         let mut id_agent_map: HashMap<Uuid, RefCell<Agent>> = HashMap::new();

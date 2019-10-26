@@ -15,12 +15,12 @@ use crate::{network, utils};
 use crate::address_book::AddressBook;
 use crate::island::{IslandEnv, IslandFactory};
 use crate::message::Message;
-use crate::settings::{AgentConfig, ClientSettings};
+use crate::settings::ClientSettings;
 
 type Port = u32;
 
 const LOGGER_LEVEL: &str = "info";
-const EXPECTED_ARGS_NUM: usize = 2;
+const EXPECTED_ARGS_NUM: usize = 3;
 
 pub struct Simulation;
 
