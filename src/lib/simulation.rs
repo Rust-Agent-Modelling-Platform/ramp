@@ -1,93 +1,92 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::sync::{Arc, Barrier};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{Arc, Barrier};
 use std::thread;
 
 use config;
 use config::ConfigError;
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use uuid::Uuid;
 use zmq::Socket;
 
-use rust_in_peace::address_book::AddressBook;
-use rust_in_peace::island::Island;
-use rust_in_peace::message::Message;
-use rust_in_peace::network;
-use rust_in_peace::settings::AgentConfig;
-use rust_in_peace::settings::ClientSettings;
-use rust_in_peace::{constants, functions, stats, utils};
+use crate::{constants, network, utils};
+use crate::address_book::AddressBook;
+use crate::island::{IslandEnv, IslandFactory};
+use crate::message::Message;
+use crate::settings::{AgentConfig, ClientSettings};
 
 type Port = u32;
 
 const LOGGER_LEVEL: &str = "info";
 const EXPECTED_ARGS_NUM: usize = 2;
 
-fn main() -> Result<(), ConfigError> {
-    utils::init_logger(LOGGER_LEVEL);
-    let args: Vec<String> = utils::parse_input_args(EXPECTED_ARGS_NUM);
-    let settings_file_name = args[1].clone();
-    let settings = load_settings(settings_file_name.clone());
-    let simulation_dir_path = stats::create_simulation_dir(constants::STATS_DIR_NAME);
-    let agent_config = Arc::new(settings.agent_config);
-    let (island_txes, island_rxes) = create_channels(settings.islands);
-    let island_ids = create_island_ids(settings.islands);
-    stats::copy_simulation_settings(&simulation_dir_path, settings_file_name.clone());
+pub struct Simulation;
 
-    let ips: Vec<(IpAddr, Port)> = parse_input_ips(&settings);
-    let context = zmq::Context::new();
-    let rep_sock = context.socket(zmq::REP).unwrap();
-    let req_sock = context.socket(zmq::REQ).unwrap();
-    let s_req_sock = context.socket(zmq::REQ).unwrap();
-    let pub_sock = context.socket(zmq::PUB).unwrap();
-    let sub_sock = context.socket(zmq::SUB).unwrap();
+impl Simulation {
+    pub fn start_simulation(factory: Box<dyn IslandFactory>) {
+        utils::init_logger(LOGGER_LEVEL);
+        let args: Vec<String> = utils::parse_input_args(EXPECTED_ARGS_NUM);
+        let settings_file_name = args[1].clone();
+        let settings = load_settings(settings_file_name.clone());
+        let simulation_dir_path = utils::create_simulation_dir(constants::STATS_DIR_NAME);
+        let (island_txes, island_rxes) = create_channels(settings.islands);
+        let island_ids = create_island_ids(settings.islands);
+        utils::copy_simulation_settings(&simulation_dir_path, settings_file_name.clone());
 
-    let host_ip = settings.network.host_ip.clone();
-    let host_pub_port = settings.network.pub_port;
-    network::bind_sock(&pub_sock, host_ip, host_pub_port);
-    connect(&sub_sock, &ips);
-    subscribe(&sub_sock, &settings);
+        let ips: Vec<(IpAddr, Port)> = parse_input_ips(&settings);
+        let context = zmq::Context::new();
+        let rep_sock = context.socket(zmq::REP).unwrap();
+        let req_sock = context.socket(zmq::REQ).unwrap();
+        let s_req_sock = context.socket(zmq::REQ).unwrap();
+        let pub_sock = context.socket(zmq::PUB).unwrap();
+        let sub_sock = context.socket(zmq::SUB).unwrap();
 
-    if settings.network.is_coordinator {
-        let coord_ip = settings.network.coordinator_ip.clone();
-        let coord_rep_port = settings.network.coordinator_rep_port;
-        network::bind_sock(&rep_sock, coord_ip, coord_rep_port);
-        wait_for_hosts(&rep_sock, &settings);
-        notify_hosts(&pub_sock, &settings);
-    } else {
-        let coord_ip = settings.network.coordinator_ip.clone();
-        let coord_rep_port = settings.network.coordinator_rep_port;
-        network::connect_sock(&req_sock, coord_ip, coord_rep_port);
-        send_ready_msg(&req_sock, &settings);
-        wait_for_signal(&sub_sock);
+        let host_ip = settings.network.host_ip.clone();
+        let host_pub_port = settings.network.pub_port;
+        network::bind_sock(&pub_sock, host_ip, host_pub_port);
+        connect(&sub_sock, &ips);
+        subscribe(&sub_sock, &settings);
+
+        if settings.network.is_coordinator {
+            let coord_ip = settings.network.coordinator_ip.clone();
+            let coord_rep_port = settings.network.coordinator_rep_port;
+            network::bind_sock(&rep_sock, coord_ip, coord_rep_port);
+            wait_for_hosts(&rep_sock, &settings);
+            notify_hosts(&pub_sock, &settings);
+        } else {
+            let coord_ip = settings.network.coordinator_ip.clone();
+            let coord_rep_port = settings.network.coordinator_rep_port;
+            network::connect_sock(&req_sock, coord_ip, coord_rep_port);
+            send_ready_msg(&req_sock, &settings);
+            wait_for_signal(&sub_sock);
+        }
+
+        if settings.network.global_sync.sync {
+            let server_ip = settings.network.global_sync.server_ip.clone();
+            let server_rep_port = settings.network.global_sync.server_rep_port;
+            let server_pub_port = settings.network.global_sync.server_pub_port;
+            network::connect_sock(&s_req_sock, server_ip.clone(), server_rep_port);
+            network::connect_sock(&sub_sock, server_ip, server_pub_port);
+            network::subscribe_sock(&sub_sock, String::from(network::SERVER_INFO_KEY));
+            send_ready_msg(&s_req_sock, &settings);
+        }
+
+        log::info!("Begin simulation");
+        start_simulation(
+            settings,
+            island_txes,
+            island_rxes,
+            island_ids,
+            simulation_dir_path,
+            sub_sock,
+            pub_sock,
+            ips,
+            s_req_sock,
+            factory,
+        );
     }
-
-    if settings.network.global_sync.sync {
-        let server_ip = settings.network.global_sync.server_ip.clone();
-        let server_rep_port = settings.network.global_sync.server_rep_port;
-        let server_pub_port = settings.network.global_sync.server_pub_port;
-        network::connect_sock(&s_req_sock, server_ip.clone(), server_rep_port);
-        network::connect_sock(&sub_sock, server_ip, server_pub_port);
-        network::subscribe_sock(&sub_sock, String::from(network::SERVER_INFO_KEY));
-        send_ready_msg(&s_req_sock, &settings);
-    }
-
-    log::info!("Begin simulation");
-    start_simulation(
-        settings,
-        agent_config,
-        island_txes,
-        island_rxes,
-        island_ids,
-        simulation_dir_path,
-        sub_sock,
-        pub_sock,
-        ips,
-        s_req_sock,
-    );
-
-    Ok(())
 }
 
 fn load_settings(file_name: String) -> ClientSettings {
@@ -163,7 +162,6 @@ fn wait_for_signal(sub: &Socket) {
 #[allow(clippy::too_many_arguments)]
 fn start_simulation(
     settings: ClientSettings,
-    agent_config: Arc<AgentConfig>,
     island_txes: Vec<Sender<Message>>,
     mut island_rxes: Vec<Receiver<Message>>,
     island_ids: Vec<Uuid>,
@@ -172,6 +170,7 @@ fn start_simulation(
     publisher: Socket,
     ips: Vec<(IpAddr, Port)>,
     s_req: Socket,
+    factory: Box<dyn IslandFactory>,
 ) {
     let mut threads = Vec::<thread::JoinHandle<_>>::new();
 
@@ -185,8 +184,7 @@ fn start_simulation(
     };
 
     for island_no in 0..settings.islands {
-        let island_stats_dir_path =
-            stats::create_island_stats_dir(&simulation_dir_path, &island_ids[island_no as usize]);
+        let stats_dir_path = utils::create_island_stats_dir(&simulation_dir_path, &island_ids[island_no as usize]);
 
         let address_book = create_address_book(
             &island_txes,
@@ -196,16 +194,14 @@ fn start_simulation(
             &pub_tx,
         );
 
-        let mut island = Island::new(
-            island_ids[island_no as usize],
+        let island_env = IslandEnv {
             address_book,
-            &functions::rastrigin,
-            settings.island.agents_number,
-            settings.turns,
-            agent_config.clone(),
-            island_stats_dir_path,
-            islands_sync.clone(),
-        );
+            stats_dir_path,
+            islands_sync: islands_sync.clone(),
+        };
+
+        let island_id = island_ids[island_no as usize];
+        let mut island = factory.create(island_id, island_env);
 
         let th_handler = if settings.network.global_sync.sync {
             thread::spawn(move || island.run_with_global_sync())

@@ -6,8 +6,8 @@ use uuid::Uuid;
 use std::cell::RefCell;
 use std::io::prelude::*;
 
-use crate::agent::Agent;
-use crate::island::Island;
+use rust_in_peace::agent::Agent;
+use crate::myisland::MyIsland;
 
 // =================================== Info-generating methods =========================================================
 
@@ -53,7 +53,7 @@ use crate::island::Island;
 //    println!("{}", container.id_agent_map.len());
 //}
 
-pub fn get_best_fitness(container: &Island) -> Option<f64> {
+pub fn get_best_fitness(container: &MyIsland) -> Option<f64> {
     let mut top_guy = match container.id_agent_map.values().take(1).last() {
         Some(a) => a,
         None => return None,
@@ -81,7 +81,7 @@ pub fn get_best_fitness(container: &Island) -> Option<f64> {
 //     log::info!("{}", top_guy.borrow().fitness.to_string().blue());
 // }
 
-pub fn get_most_fit_agent(container: &Island) -> &RefCell<Agent> {
+pub fn get_most_fit_agent(container: &MyIsland) -> &RefCell<Agent> {
     let mut top_guy = container.id_agent_map.values().take(1).last().unwrap();
     for agent in container.id_agent_map.values() {
         if agent.borrow().fitness > top_guy.borrow().fitness {
@@ -92,51 +92,7 @@ pub fn get_most_fit_agent(container: &Island) -> &RefCell<Agent> {
 }
 
 // =================================== Stat files =========================================================
-pub fn create_simulation_dir(root_dir_path: &str) -> String {
-    let now = Local::now();
-    let hour = now.hour();
-    let (_, year) = now.year_ce();
-
-    let simulation_dir_name = format!(
-        "{}-{:0>2}-{:0>2}_{:0>2}{:0>2}{:0>2}",
-        year.to_string(),
-        now.month().to_string(),
-        now.day().to_string(),
-        hour.to_string(),
-        now.minute().to_string(),
-        now.second().to_string()
-    );
-    let simulation_dir_path = format!("{}/{}", &root_dir_path, &simulation_dir_name);
-    match fs::create_dir_all(simulation_dir_path.clone()) {
-        Err(e) => eprintln!("{}", e),
-        Ok(_) => log::info!("Created directory for simulation: {}", &simulation_dir_name),
-    }
-    simulation_dir_path
-}
-
-pub fn copy_simulation_settings(dest_dir_path: &str, file_name: String) {
-    let dest_file_path = format!("{}/{}", dest_dir_path, file_name);
-    let _file = File::create(&dest_file_path).unwrap();
-    fs::copy(file_name.to_string(), dest_file_path).unwrap();
-}
-
-pub fn create_island_stats_dir(simulation_dir_path: &str, island_id: &Uuid) -> String {
-    let path = format!(
-        "{}/Island-{}",
-        &simulation_dir_path,
-        &island_id.to_string()[..5]
-    );
-    match fs::create_dir(&path) {
-        Err(e) => eprintln!("{}", e),
-        Ok(_) => log::info!(
-            "Created directory for Island-{}",
-            &island_id.to_string()[..5]
-        ),
-    }
-    path
-}
-
-pub fn generate_stat_files(container: &Island, time: u64, dir: &str) {
+pub fn generate_stat_files(container: &MyIsland, time: u64, dir: &str) {
     //In case of decision to create a Stat struct - could be useful
     let stat_types = vec![
         "time.csv",

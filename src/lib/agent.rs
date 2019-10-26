@@ -12,7 +12,7 @@ use std::cell::RefCell;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Agent {
     pub id: Uuid,
-    pub config: Arc<AgentConfig>,
+    pub config: AgentConfig,
     pub energy: i32,
     pub genotype: Vec<f64>,
     pub fitness: f64,
@@ -21,7 +21,7 @@ pub struct Agent {
 impl Agent {
     pub fn new(
         id: Uuid,
-        config: Arc<AgentConfig>,
+        config: AgentConfig,
         genotype: Vec<f64>,
         calculate_fitness: &dyn Fn(&[f64]) -> f64,
         energy: i32,
