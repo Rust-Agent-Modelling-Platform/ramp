@@ -16,6 +16,7 @@ use crate::address_book::AddressBook;
 use crate::island::{IslandEnv, IslandFactory};
 use crate::message::Message;
 use crate::settings::ClientSettings;
+use std::time::Instant;
 
 type Port = u32;
 
@@ -178,7 +179,10 @@ fn start_simulation(
     };
 
     for island_no in 0..settings.islands {
+        let turns = settings.turns;
+        let island_id = island_ids[island_no as usize];
         let stats_dir_path = utils::create_island_stats_dir(&simulation_dir_path, &island_ids[island_no as usize]);
+        let island_sync = islands_sync.clone();
 
         let address_book = create_address_book(
             &island_txes,
@@ -191,16 +195,23 @@ fn start_simulation(
         let island_env = IslandEnv {
             address_book,
             stats_dir_path,
-            islands_sync: islands_sync.clone(),
+            start_time: Instant::now(),
         };
 
-        let island_id = island_ids[island_no as usize];
         let mut island = factory.create(island_id, island_env);
 
         let th_handler = if settings.network.global_sync.sync {
             thread::spawn(move || island.run_with_global_sync())
         } else {
-            thread::spawn(move || island.run())
+            thread::spawn(move || {
+                for turn in 0..turns {
+                    island.do_turn(turn);
+                    if let Some(barrier) = &island_sync {
+                        barrier.wait();
+                    };
+                }
+                island.finish();
+            })
         };
         threads.push(th_handler);
     }

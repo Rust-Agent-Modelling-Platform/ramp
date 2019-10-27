@@ -2,6 +2,7 @@ use config::{Config, ConfigError, File};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ClientSettings {
+    pub turns: u32,
     pub islands: u32,
     pub network: Network,
     pub islands_sync: bool,

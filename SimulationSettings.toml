@@ -1,6 +1,5 @@
 [island_settings]
 agents_number = 50
-turns = 400
 
 [agent_settings]
 minimum = true

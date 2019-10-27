@@ -9,7 +9,6 @@ pub struct SimulationSettings {
 #[derive(Debug, Deserialize, Copy, Clone)]
 pub struct IslandSettings {
     pub agents_number: u32,
-    pub turns: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone)]

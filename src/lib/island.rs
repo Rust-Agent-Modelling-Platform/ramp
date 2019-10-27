@@ -3,18 +3,21 @@ use std::sync::{Arc, Barrier};
 use uuid::Uuid;
 
 use crate::address_book::AddressBook;
+use std::time::Instant;
 
 pub struct IslandEnv {
     pub address_book: AddressBook,
     pub stats_dir_path: String,
-    pub islands_sync: Option<Arc<Barrier>>
+    pub start_time: Instant,
 }
 
 pub trait Island: Send {
 
-    fn run(&mut self);
+    fn do_turn(&mut self, turn_number: u32);
 
     fn run_with_global_sync(&mut self);
+
+    fn finish(&mut self);
 }
 
 pub trait IslandFactory {

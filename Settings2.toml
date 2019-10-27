@@ -1,3 +1,4 @@
+turns = 400
 islands = 10
 islands_sync = true
 stats_path = "stats"

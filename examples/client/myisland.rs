@@ -67,35 +67,25 @@ impl Stats {
 pub struct MyIsland {
     pub id: Uuid,
     pub id_agent_map: HashMap<Uuid, RefCell<Agent>>,
-    pub turn_number: u64,
     pub action_queue: Vec<Action>,
     pub agent_settings: AgentSettings,
     pub stats: Stats,
-    turns: u32,
     island_env: IslandEnv,
     id_queues: IdQueues,
 }
 impl Island for MyIsland {
-    fn run(&mut self) {
-        let start_time = Instant::now();
-        for turn_number in 1..=self.turns {
-            self.log_turn_start(turn_number);
+    fn do_turn(&mut self, turn_number: u32) {
+        self.log_turn_start(turn_number);
 
-            self.receive_messages();
-            self.clear_action_queues();
-            self.create_action_queues();
-            self.resolve_migrations();
-            self.resolve_procreations();
-            self.resolve_meetings();
-            self.resolve_deads();
+        self.receive_messages();
+        self.clear_action_queues();
+        self.create_action_queues();
+        self.resolve_migrations();
+        self.resolve_procreations();
+        self.resolve_meetings();
+        self.resolve_deads();
 
-            self.log_turn_end_and_update_best_agent();
-
-            if let Some(islands_sync) = &self.island_env.islands_sync {
-                islands_sync.wait();
-            };
-        }
-        self.finish(start_time);
+        self.log_turn_end_and_update_best_agent();
     }
 
     fn run_with_global_sync(&mut self) {
@@ -118,7 +108,23 @@ impl Island for MyIsland {
             self.log_turn_end_and_update_best_agent();
             self.island_env.address_book.pub_tx.send(Message::TurnDone).unwrap();
         }
-        self.finish(start_time);
+//        self.finish(start_time);
+    }
+
+    fn finish(&mut self) {
+        let duration = self.island_env.start_time.elapsed().as_secs();
+        stats::generate_stat_files(&self, duration.clone(), &self.island_env.stats_dir_path);
+
+        log::info!("{}", "================= END =================".green());
+        log::info!("Time elapsed: {} seconds", duration);
+        log::info!(
+            "At end of simulation the best agent is: {}",
+            stats::get_most_fit_agent(&self)
+                .borrow()
+                .fitness
+                .to_string()
+                .blue()
+        );
     }
 }
 
@@ -129,7 +135,6 @@ impl MyIsland {
         island_env: IslandEnv,
         calculate_fitness: &dyn Fn(&[f64]) -> f64,
         agents_number: u32,
-        turns: u32,
         agent_settings: AgentSettings,
     ) -> Self {
         MyIsland {
@@ -139,9 +144,7 @@ impl MyIsland {
                 &agent_settings,
                 calculate_fitness,
             ),
-            turn_number: 0,
             action_queue: Vec::new(),
-            turns,
             agent_settings,
             island_env,
             id_queues: IdQueues::new(),

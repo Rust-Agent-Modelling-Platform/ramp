@@ -35,7 +35,6 @@ impl IslandFactory for MyIslandFactory {
             island_env,
             &functions::rastrigin,
             settings.island_settings.agents_number,
-            settings.island_settings.turns,
             settings.agent_settings,
         );
         Box::new(island)
