@@ -1,5 +1,6 @@
 use crate::collector::Collector;
 use crate::dispatcher::{Dispatcher, DispatcherMessage};
+use crate::island::Island;
 use std::net::IpAddr;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -180,46 +181,38 @@ fn start_simulation(
     for island_no in 0..settings.islands {
         let turns = settings.turns;
         let island_id = island_ids[island_no as usize];
-        let stats_dir_path =
-            utils::create_island_stats_dir(&simulation_dir_path, &island_ids[island_no as usize]);
+        let stats_dir_path = utils::create_island_stats_dir(&simulation_dir_path, &island_id);
         let island_sync = islands_sync.clone();
 
-        let address_book = create_address_book(
-            &island_txes,
-            &mut island_rxes,
-            &island_ids,
-            island_no as i32,
-            &dispatcher_tx,
-        );
+        let address_book = 
+            create_address_book(&island_txes, &island_ids, island_no as i32, &dispatcher_tx);
 
+        let island_rx = island_rxes.remove(0);
         let island_env = IslandEnv::new(address_book, stats_dir_path, Instant::now());
-        let mut island = factory.create(island_id, island_env);
-
+        let island = factory.create(island_id, island_env);
+        let dispatcher_tx_cp = mpsc::Sender::clone(&dispatcher_tx);
         let th_handler = if settings.network.global_sync.sync {
-            thread::spawn(move || island.run_with_global_sync())
-        } else {
             thread::spawn(move || {
-                for turn in 0..turns {
-                    island.do_turn(turn, island.get_island_env().receive_messages());
-                    if let Some(barrier) = &island_sync {
-                        barrier.wait();
-                    };
-                }
-                island.finish();
+                run_with_global_sync(island, island_rx, island_sync, dispatcher_tx_cp)
             })
+        } else {
+            thread::spawn(move || run(island, island_rx, turns, island_sync))
         };
         threads.push(th_handler);
     }
 
     let collector_address_book = AddressBook {
-        self_rx: collector_rx,
         dispatcher_tx: mpsc::Sender::clone(&dispatcher_tx),
         addresses: island_txes.clone(),
         islands: island_ids.clone(),
     };
     let settings_copy = settings.clone();
-    thread::spawn(move || Dispatcher::create(dispatcher_rx, pub_sock, ips, settings_copy, srv_req_sock).start());
-    thread::spawn(move || Collector::create(sub_sock, collector_address_book).start());
+    thread::spawn(move || {
+        Dispatcher::create(dispatcher_rx, pub_sock, ips, settings_copy, srv_req_sock).start()
+    });
+    thread::spawn(move || {
+        Collector::create(collector_rx, sub_sock, collector_address_book).start()
+    });
 
     for thread in threads {
         thread.join().unwrap();
@@ -231,6 +224,57 @@ fn start_simulation(
             .unwrap();
         collector_tx.send(Message::FinSim).unwrap();
     }
+}
+
+fn run_with_global_sync(
+    mut island: Box<dyn Island>,
+    island_rx: Receiver<Message>,
+    island_sync: Option<Arc<Barrier>>,
+    dispatcher_tx: Sender<DispatcherMessage>,
+) {
+    while let (true, turn, messages) = receive_messages_with_global_sync(&island_rx) {
+        island.do_turn(turn, messages);
+        island_sync.as_ref().map(|barrier| barrier.wait());
+        dispatcher_tx.send(DispatcherMessage::Info(Message::TurnDone)).unwrap();
+    }
+    island.finish();
+}
+
+fn run(
+    mut island: Box<dyn Island>,
+    island_rx: Receiver<Message>,
+    turns: u32,
+    island_sync: Option<Arc<Barrier>>,
+) {
+    for turn in 0..turns {
+        let messages = island_rx.try_iter().collect();
+        island.do_turn(turn, messages);
+        island_sync.as_ref().map(|barrier| barrier.wait());
+    }
+    island.finish();
+}
+
+type NextTurn = bool;
+type Turn = u32;
+fn receive_messages_with_global_sync(rx: &Receiver<Message>) -> (NextTurn, Turn, Vec<Message>) {
+    let mut msg_queue = vec![];
+    let mut next_turn = false;
+    let mut fin_sim = false;
+    let mut current_turn = 0;
+    while !next_turn && !fin_sim {
+        let messages = rx.try_iter();
+        for msg in messages {
+            match msg {
+                Message::NextTurn(turn_number) => {
+                    current_turn = turn_number;
+                    next_turn = true
+                }
+                Message::FinSim => fin_sim = true,
+                _ => msg_queue.push(msg),
+            }
+        }
+    }
+    (!fin_sim, current_turn as u32, msg_queue)
 }
 
 fn create_channels(islands_number: u32) -> (Vec<Sender<Message>>, Vec<Receiver<Message>>) {
@@ -254,7 +298,6 @@ fn create_island_ids(islands_number: u32) -> Vec<Uuid> {
 
 fn create_address_book(
     txes: &Vec<Sender<Message>>,
-    rxes: &mut Vec<Receiver<Message>>,
     island_ids: &Vec<Uuid>,
     island_no: i32,
     dispatcher_tx: &Sender<DispatcherMessage>,
@@ -265,7 +308,6 @@ fn create_address_book(
     island_ids_cp.remove(island_no as usize);
 
     AddressBook {
-        self_rx: rxes.remove(0),
         dispatcher_tx: mpsc::Sender::clone(dispatcher_tx),
         addresses: txes_cp,
         islands: island_ids_cp,

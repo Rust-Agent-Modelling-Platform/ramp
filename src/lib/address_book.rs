@@ -1,6 +1,6 @@
 use crate::dispatcher::DispatcherMessage;
 use rand::{thread_rng, Rng};
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::Sender;
 
 use uuid::Uuid;
 
@@ -10,7 +10,6 @@ use crate::message::Message;
 pub struct SendError<Message>(pub Message);
 
 pub struct AddressBook {
-    pub self_rx: Receiver<Message>,
     pub dispatcher_tx: Sender<DispatcherMessage>,
     pub addresses: Vec<Sender<Message>>,
     pub islands: Vec<Uuid>,
@@ -18,21 +17,15 @@ pub struct AddressBook {
 
 impl AddressBook {
     pub fn new(
-        self_rx: Receiver<Message>,
         dispatcher_tx: Sender<DispatcherMessage>,
         addresses: Vec<Sender<Message>>,
         islands: Vec<Uuid>,
     ) -> AddressBook {
         AddressBook {
-            self_rx,
             dispatcher_tx,
             addresses,
             islands,
         }
-    }
-
-    pub fn receive_messages(&self) -> Vec<Message> {
-        self.self_rx.try_iter().collect()
     }
 
     pub fn send_to_rnd_local(&mut self, msg: Message) -> Result<(), SendError<Message>> {
@@ -76,10 +69,14 @@ impl AddressBook {
     }
 
     pub fn send_to_rnd_global(&mut self, msg: Message) {
-        self.dispatcher_tx.send(DispatcherMessage::Random(msg)).unwrap();
+        self.dispatcher_tx
+            .send(DispatcherMessage::Random(msg))
+            .unwrap();
     }
 
     pub fn send_to_all_global(&mut self, msg: Message) {
-        self.dispatcher_tx.send(DispatcherMessage::Broadcast(msg)).unwrap();
+        self.dispatcher_tx
+            .send(DispatcherMessage::Broadcast(msg))
+            .unwrap();
     }
 }

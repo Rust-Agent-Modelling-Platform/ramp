@@ -2,16 +2,23 @@ use crate::address_book::AddressBook;
 use crate::dispatcher::DispatcherMessage;
 use crate::message::Message;
 use crate::network;
+use std::sync::mpsc::Receiver;
 use zmq::Socket;
 
 pub struct Collector {
+    rx: Receiver<Message>,
     sub_sock: Socket,
     address_book: AddressBook,
 }
 
 impl Collector {
-    pub fn create(sub_sock: Socket, address_book: AddressBook) -> Collector {
+    pub fn create(
+        self_rx: Receiver<Message>,
+        sub_sock: Socket,
+        address_book: AddressBook,
+    ) -> Collector {
         Collector {
+            rx: self_rx,
             sub_sock,
             address_book,
         }
@@ -21,7 +28,7 @@ impl Collector {
         log::info!("Starting receiver thread");
         let mut fin_sim = false;
         while !fin_sim {
-            let incoming = self.address_book.self_rx.try_iter();
+            let incoming = self.rx.try_iter();
             for msg in incoming {
                 match msg {
                     Message::FinSim => {

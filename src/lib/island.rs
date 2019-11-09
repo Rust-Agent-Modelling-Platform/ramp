@@ -25,10 +25,6 @@ impl IslandEnv {
         }
     }
 
-    pub fn receive_messages(&self) -> Vec<Message> {
-        self.address_book.receive_messages()
-    }
-
     pub fn send_to_rnd_local(&mut self, msg: Message) -> Result<(), SendError<Message>> {
         self.address_book.send_to_rnd_local(msg)
     }
@@ -52,8 +48,6 @@ impl IslandEnv {
 
 pub trait Island: Send {
     fn do_turn(&mut self, turn_number: u32, messages: Vec<Message>);
-
-    fn run_with_global_sync(&mut self);
 
     fn finish(&mut self);
 
