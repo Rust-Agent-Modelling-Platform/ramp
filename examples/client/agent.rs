@@ -1,13 +1,12 @@
 use rand::{thread_rng, Rng};
 use std::f64;
 use std::fmt;
-use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::action::Action;
 use crate::functions;
-use std::cell::RefCell;
 use crate::settings::AgentSettings;
+use std::cell::RefCell;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Agent {

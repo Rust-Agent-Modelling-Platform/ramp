@@ -2,7 +2,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::process;
-use std::sync::{Arc, Barrier};
 use std::time::Instant;
 
 use colored::*;
@@ -10,13 +9,11 @@ use rand::{thread_rng, Rng};
 use uuid::Uuid;
 
 use crate::action::Action;
-use rust_in_peace::address_book::AddressBook;
 use crate::agent::Agent;
-use rust_in_peace::message::Message;
-use rust_in_peace::message;
-use rust_in_peace::island::{Island, IslandEnv};
-use crate::stats;
 use crate::settings::AgentSettings;
+use crate::stats;
+use rust_in_peace::island::{Island, IslandEnv};
+use rust_in_peace::message::Message;
 
 const LOCAL_MIGRATION_THRESHOLD: u32 = 50;
 
@@ -74,10 +71,10 @@ pub struct MyIsland {
     id_queues: IdQueues,
 }
 impl Island for MyIsland {
-    fn do_turn(&mut self, turn_number: u32) {
+    fn do_turn(&mut self, turn_number: u32, messages: Vec<Message>) {
         self.log_turn_start(turn_number);
 
-        self.receive_messages();
+        self.resolve_messages(messages);
         self.clear_action_queues();
         self.create_action_queues();
         self.resolve_migrations();
@@ -88,28 +85,39 @@ impl Island for MyIsland {
         self.log_turn_end_and_update_best_agent();
     }
 
-    fn run_with_global_sync(&mut self) {
-        log::info!("Run with global Sync");
-        let start_time = Instant::now();
-
-        loop {
-            let current_turn = self.receive_messages_with_global_sync();
-            if current_turn == 0 {
-                break;
-            }
-            self.log_turn_start(current_turn);
-            self.clear_action_queues();
-            self.create_action_queues();
-            self.resolve_migrations();
-            self.resolve_procreations();
-            self.resolve_meetings();
-            self.resolve_deads();
-
-            self.log_turn_end_and_update_best_agent();
-            self.island_env.address_book.pub_tx.send(Message::TurnDone).unwrap();
-        }
-//        self.finish(start_time);
+    fn get_island_env(&self) -> &IslandEnv {
+        &self.island_env
     }
+
+    fn run_with_global_sync(&mut self) {
+        unimplemented!();
+    }
+    // fn run_with_global_sync(&mut self) {
+    //     log::info!("Run with global Sync");
+    //     let start_time = Instant::now();
+
+    //     loop {
+    //         // let current_turn = self.receive_messages_with_global_sync();
+    //         if current_turn == 0 {
+    //             break;
+    //         }
+    //         self.log_turn_start(current_turn);
+    //         self.clear_action_queues();
+    //         self.create_action_queues();
+    //         self.resolve_migrations();
+    //         self.resolve_procreations();
+    //         self.resolve_meetings();
+    //         self.resolve_deads();
+
+    //         self.log_turn_end_and_update_best_agent();
+    //         // self.island_env
+    //         //     .address_book
+    //         //     .pub_tx
+    //         //     .send(Message::TurnDone)
+    //         //     .unwrap();
+    //     }
+    //     //        self.finish(start_time);
+    // }
 
     fn finish(&mut self) {
         let duration = self.island_env.start_time.elapsed().as_secs();
@@ -157,40 +165,41 @@ impl MyIsland {
     /// is pushed to queue and is proceed after receiving NextTurn msg.
     /// Method returns current turn number if NextTurn msg is received or
     /// 0 in other case.
-    fn receive_messages_with_global_sync(&mut self) -> message::TurnNumber {
-        let mut msg_queue = vec![];
-        let mut next_turn = false;
-        let mut fin_sim = false;
-        let mut current_turn = 0;
-        while !next_turn && !fin_sim {
-            let messages = self.island_env.address_book.self_rx.try_iter();
-            for msg in messages {
-                match msg {
-                    Message::NextTurn(turn_number) => {
-                        current_turn = turn_number;
-                        next_turn = true
-                    }
-                    Message::FinSim => fin_sim = true,
-                    _ => msg_queue.push(msg),
-                }
-            }
-        }
-        let mut migrants_num = 0;
-        for msg in msg_queue {
-            match msg {
-                Message::Agent(migrant) => {
-                    let d_migrant: Agent = bincode::deserialize(&migrant).unwrap();
-                    migrants_num += 1;
-                    self.id_agent_map.insert(d_migrant.id, RefCell::new(d_migrant));
-                }
-                _ => log::error!("Unexpected msg {:#?}", msg),
-            }
-        }
-        self.stats
-            .all_received_migrations_in_turn
-            .push(migrants_num);
-        current_turn
-    }
+    // fn receive_messages_with_global_sync(&mut self) -> message::TurnNumber {
+    //     let mut msg_queue = vec![];
+    //     let mut next_turn = false;
+    //     let mut fin_sim = false;
+    //     let mut current_turn = 0;
+    //     while !next_turn && !fin_sim {
+    //         let messages = self.island_env.address_book.self_rx.try_iter();
+    //         for msg in messages {
+    //             match msg {
+    //                 Message::NextTurn(turn_number) => {
+    //                     current_turn = turn_number;
+    //                     next_turn = true
+    //                 }
+    //                 Message::FinSim => fin_sim = true,
+    //                 _ => msg_queue.push(msg),
+    //             }
+    //         }
+    //     }
+    //     let mut migrants_num = 0;
+    //     for msg in msg_queue {
+    //         match msg {
+    //             Message::Agent(migrant) => {
+    //                 let d_migrant: Agent = bincode::deserialize(&migrant).unwrap();
+    //                 migrants_num += 1;
+    //                 self.id_agent_map
+    //                     .insert(d_migrant.id, RefCell::new(d_migrant));
+    //             }
+    //             _ => log::error!("Unexpected msg {:#?}", msg),
+    //         }
+    //     }
+    //     self.stats
+    //         .all_received_migrations_in_turn
+    //         .push(migrants_num);
+    //     current_turn
+    // }
 
     fn log_turn_start(&self, turn_number: u32) {
         log::debug!(
@@ -306,7 +315,7 @@ impl MyIsland {
             "Number of migrating agents this turn: {}",
             self.id_queues.migrating_ids.len()
         );
-        if self.island_env.address_book.addresses.is_empty() {
+        if self.island_env.get_active_islands_number() < 1 {
             self.id_queues.migrating_ids.clear();
             return;
         }
@@ -318,11 +327,7 @@ impl MyIsland {
                 Some(agent) => {
                     let s_agent = bincode::serialize(&agent.into_inner()).unwrap();
                     if prob <= LOCAL_MIGRATION_THRESHOLD {
-                        match self
-                            .island_env
-                            .address_book
-                            .send_to_rnd(Message::Agent(s_agent))
-                        {
+                        match self.island_env.send_to_rnd_local(Message::Agent(s_agent)) {
                             Ok(()) => local_migrations_num += 1,
                             Err(e) => match e.0 {
                                 Message::Agent(s_agent) => {
@@ -333,11 +338,7 @@ impl MyIsland {
                             },
                         }
                     } else {
-                        self.island_env
-                            .address_book
-                            .pub_tx
-                            .send(Message::Agent(s_agent))
-                            .unwrap();
+                        self.island_env.send_to_rnd_global(Message::Agent(s_agent));
                         global_migrations_num += 1;
                     }
                 }
@@ -385,15 +386,15 @@ impl MyIsland {
         );
     }
 
-    fn receive_messages(&mut self) {
-        let messages = self.island_env.address_book.self_rx.try_iter();
+    fn resolve_messages(&mut self, messages: Vec<Message>) {
         let mut migrants_num = 0;
         for message in messages {
             match message {
                 Message::Agent(migrant) => {
                     migrants_num += 1;
                     let d_migrant: Agent = bincode::deserialize(&migrant).unwrap();
-                    self.id_agent_map.insert(d_migrant.id, RefCell::new(d_migrant));
+                    self.id_agent_map
+                        .insert(d_migrant.id, RefCell::new(d_migrant));
                 }
                 _ => log::error!("Unexpected msg"),
             }

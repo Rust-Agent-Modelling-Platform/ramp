@@ -6,6 +6,7 @@ type From = String;
 
 pub const COORD_INFO_KEY: &str = "COORD_INFO";
 pub const SERVER_INFO_KEY: &str = "SERVER_INFO";
+pub const BROADCAST_KEY: &str = "BROADCAST";
 
 pub fn connect_sock(sock: &Socket, ip: String, port: u32) {
     let address = &format!("tcp://{}:{}", ip, port);

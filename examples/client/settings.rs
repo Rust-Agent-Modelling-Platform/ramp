@@ -1,4 +1,4 @@
-use config::{ConfigError, Config, File};
+use config::{Config, ConfigError, File};
 
 #[derive(Debug, Deserialize, Copy, Clone)]
 pub struct SimulationSettings {
@@ -23,7 +23,6 @@ pub struct AgentSettings {
     pub lower_bound: f64,
     pub upper_bound: f64,
 }
-
 
 impl SimulationSettings {
     pub fn new(file_name: String) -> Result<Self, ConfigError> {

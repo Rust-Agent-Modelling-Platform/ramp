@@ -1,7 +1,7 @@
+use chrono::{Datelike, Local, Timelike};
 use flexi_logger::Logger;
-use std::{env, fs};
-use chrono::{Local, Timelike, Datelike};
 use std::fs::File;
+use std::{env, fs};
 use uuid::Uuid;
 
 pub fn init_logger(logger_lever: &str) {

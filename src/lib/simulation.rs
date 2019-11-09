@@ -1,21 +1,19 @@
-use std::collections::HashMap;
+use crate::collector::Collector;
+use crate::dispatcher::{Dispatcher, DispatcherMessage};
 use std::net::IpAddr;
-use std::sync::{Arc, Barrier};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{Arc, Barrier};
 use std::thread;
 
-use config;
-use config::ConfigError;
-use rand::{Rng, thread_rng};
 use uuid::Uuid;
 use zmq::Socket;
 
-use crate::{network, utils};
 use crate::address_book::AddressBook;
 use crate::island::{IslandEnv, IslandFactory};
 use crate::message::Message;
 use crate::settings::ClientSettings;
+use crate::{network, utils};
 use std::time::Instant;
 
 type Port = u32;
@@ -112,6 +110,7 @@ fn subscribe(sub: &Socket, settings: &ClientSettings) {
     );
     network::subscribe_sock(sub, private_sub_key);
     network::subscribe_sock(sub, String::from(network::COORD_INFO_KEY));
+    network::subscribe_sock(sub, String::from(network::BROADCAST_KEY));
 }
 
 fn wait_for_hosts(rep: &Socket, settings: &ClientSettings) {
@@ -130,13 +129,13 @@ fn wait_for_hosts(rep: &Socket, settings: &ClientSettings) {
     }
 }
 
-fn notify_hosts(publisher: &Socket, settings: &ClientSettings) {
+fn notify_hosts(pub_sock: &Socket, settings: &ClientSettings) {
     log::info!("Notifying hosts");
     let key = String::from(network::COORD_INFO_KEY);
     let from = settings.network.host_ip.clone();
     let msg = Message::StartSim;
 
-    network::send_ps(publisher, key, from, msg);
+    network::send_ps(pub_sock, key, from, msg);
 }
 
 fn send_ready_msg(req: &Socket, settings: &ClientSettings) {
@@ -159,18 +158,18 @@ fn wait_for_signal(sub: &Socket) {
 fn start_simulation(
     settings: ClientSettings,
     simulation_dir_path: String,
-    subscriber: Socket,
-    publisher: Socket,
+    sub_sock: Socket,
+    pub_sock: Socket,
     ips: Vec<(IpAddr, Port)>,
-    s_req: Socket,
+    srv_req_sock: Socket,
     factory: Box<dyn IslandFactory>,
 ) {
     let (island_txes, mut island_rxes) = create_channels(settings.islands);
     let island_ids = create_island_ids(settings.islands);
     let mut threads = Vec::<thread::JoinHandle<_>>::new();
 
-    let (sub_tx, sub_rx) = mpsc::channel();
-    let (pub_tx, pub_rx) = mpsc::channel();
+    let (collector_tx, collector_rx) = mpsc::channel();
+    let (dispatcher_tx, dispatcher_rx) = mpsc::channel();
 
     let islands_sync = if settings.islands_sync {
         Some(Arc::new(Barrier::new(settings.islands as usize)))
@@ -181,7 +180,8 @@ fn start_simulation(
     for island_no in 0..settings.islands {
         let turns = settings.turns;
         let island_id = island_ids[island_no as usize];
-        let stats_dir_path = utils::create_island_stats_dir(&simulation_dir_path, &island_ids[island_no as usize]);
+        let stats_dir_path =
+            utils::create_island_stats_dir(&simulation_dir_path, &island_ids[island_no as usize]);
         let island_sync = islands_sync.clone();
 
         let address_book = create_address_book(
@@ -189,15 +189,10 @@ fn start_simulation(
             &mut island_rxes,
             &island_ids,
             island_no as i32,
-            &pub_tx,
+            &dispatcher_tx,
         );
 
-        let island_env = IslandEnv {
-            address_book,
-            stats_dir_path,
-            start_time: Instant::now(),
-        };
-
+        let island_env = IslandEnv::new(address_book, stats_dir_path, Instant::now());
         let mut island = factory.create(island_id, island_env);
 
         let th_handler = if settings.network.global_sync.sync {
@@ -205,7 +200,7 @@ fn start_simulation(
         } else {
             thread::spawn(move || {
                 for turn in 0..turns {
-                    island.do_turn(turn);
+                    island.do_turn(turn, island.get_island_env().receive_messages());
                     if let Some(barrier) = &island_sync {
                         barrier.wait();
                     };
@@ -216,107 +211,26 @@ fn start_simulation(
         threads.push(th_handler);
     }
 
-    let sub_th_address_book =
-        create_address_book(&island_txes, &mut island_rxes, &island_ids, -1, &pub_tx);
+    let collector_address_book = AddressBook {
+        self_rx: collector_rx,
+        dispatcher_tx: mpsc::Sender::clone(&dispatcher_tx),
+        addresses: island_txes.clone(),
+        islands: island_ids.clone(),
+    };
     let settings_copy = settings.clone();
-    thread::spawn(move || start_sender_thread(pub_rx, publisher, ips, settings_copy, s_req));
-    thread::spawn(move || start_receiver_thread(sub_rx, subscriber, sub_th_address_book));
+    thread::spawn(move || Dispatcher::create(dispatcher_rx, pub_sock, ips, settings_copy, srv_req_sock).start());
+    thread::spawn(move || Collector::create(sub_sock, collector_address_book).start());
 
     for thread in threads {
         thread.join().unwrap();
     }
 
     if !settings.network.global_sync.sync {
-        pub_tx.send(Message::FinSim).unwrap();
-        sub_tx.send(Message::FinSim).unwrap();
+        dispatcher_tx
+            .send(DispatcherMessage::Info(Message::FinSim))
+            .unwrap();
+        collector_tx.send(Message::FinSim).unwrap();
     }
-}
-
-fn start_sender_thread(
-    pub_rx: Receiver<Message>,
-    publisher: Socket,
-    ips: Vec<(IpAddr, Port)>,
-    settings: ClientSettings,
-    s_req: Socket,
-) {
-    log::info!("Starting sender thread");
-    let mut fin_sim = false;
-    let mut confirmations = 0;
-    let from = settings.network.host_ip;
-    while !fin_sim {
-        let incoming = pub_rx.try_iter();
-        for msg in incoming {
-            match msg {
-                Message::Agent(_) => {
-                    let random_index = thread_rng().gen_range(0, ips.len());
-                    let (ip, port) = ips[random_index];
-                    let key = format!("{}:{}", ip.to_string(), port.to_string());
-
-                    network::send_ps(&publisher, key, from.clone(), msg);
-                }
-                Message::TurnDone => {
-                    confirmations += 1;
-                    if confirmations == settings.islands {
-                        network::send_rr(&s_req, from.clone(), Message::TurnDone);
-                        let (_, _) = network::recv_rr(&s_req);
-                        confirmations = 0;
-                    }
-                }
-                Message::FinSim => {
-                    log::info!("Finishing simulation in sender thread");
-                    fin_sim = true;
-                    break;
-                }
-                _ => log::warn!("Unexpected msg in sender thread {:#?}", msg),
-            }
-        }
-    }
-    log::info!("Sender thread finished")
-}
-
-fn start_receiver_thread(rx: Receiver<Message>, sub_sock: Socket, mut address_book: AddressBook) {
-    log::info!("Starting receiver thread");
-    let mut fin_sim = false;
-    while !fin_sim {
-        let incoming = rx.try_iter();
-        for msg in incoming {
-            match msg {
-                Message::FinSim => {
-                    log::info!("Finishing simulation in receiver thread");
-                    address_book.send_to_all(msg);
-                    fin_sim = true;
-                    break;
-                }
-                _ => log::warn!("Unexpected message in receiver thread {:#?}", msg),
-            }
-        }
-
-        //Next step: non-blocking check if there are any new agents waiting to be added to our system
-        let mut items = [sub_sock.as_poll_item(zmq::POLLIN)];
-        zmq::poll(&mut items, -1).unwrap();
-        if items[0].is_readable() {
-            let (_, _, msg) = network::recv_ps(&sub_sock);
-            match msg {
-                Message::NextTurn(_) => {
-                    address_book.send_to_all(msg);
-                }
-                Message::FinSim => {
-                    log::info!("Finishing simulation in receiver thread");
-                    address_book.send_to_all(msg.clone());
-                    address_book.pub_tx.send(msg).unwrap();
-                    break;
-                }
-                Message::Agent(_) => match address_book.send_to_rnd(msg) {
-                    Ok(()) => (),
-                    Err(e) => {
-                        log::info!("{:?} (No more active islands in system)", e);
-                    }
-                },
-                _ => log::warn!("Unexpected message in receiver thread {:#?}", msg),
-            }
-        }
-    }
-    log::info!("Receiver thread finished");
 }
 
 fn create_channels(islands_number: u32) -> (Vec<Sender<Message>>, Vec<Receiver<Message>>) {
@@ -339,24 +253,21 @@ fn create_island_ids(islands_number: u32) -> Vec<Uuid> {
 }
 
 fn create_address_book(
-    txes: &[Sender<Message>],
+    txes: &Vec<Sender<Message>>,
     rxes: &mut Vec<Receiver<Message>>,
-    island_ids: &[Uuid],
+    island_ids: &Vec<Uuid>,
     island_no: i32,
-    pub_tx: &Sender<Message>,
+    dispatcher_tx: &Sender<DispatcherMessage>,
 ) -> AddressBook {
-    let mut addresses: HashMap<Uuid, (Sender<Message>, bool)> = HashMap::new();
-    for (i, tx) in txes.iter().enumerate().take(txes.len()) {
-        if i != island_no as usize {
-            addresses.insert(island_ids[i], (mpsc::Sender::clone(tx), true));
-        }
-    }
-    if !rxes.is_empty() {
-        let rx = rxes.remove(0);
-        AddressBook::new(rx, addresses, mpsc::Sender::clone(pub_tx))
-    } else {
-        //This is for the sub thread
-        let (_, rx) = mpsc::channel();
-        AddressBook::new(rx, addresses, mpsc::Sender::clone(pub_tx))
+    let mut txes_cp = txes.clone();
+    txes_cp.remove(island_no as usize);
+    let mut island_ids_cp = island_ids.clone();
+    island_ids_cp.remove(island_no as usize);
+
+    AddressBook {
+        self_rx: rxes.remove(0),
+        dispatcher_tx: mpsc::Sender::clone(dispatcher_tx),
+        addresses: txes_cp,
+        islands: island_ids_cp,
     }
 }

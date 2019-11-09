@@ -1,116 +1,85 @@
-use std::collections::HashMap;
+use crate::dispatcher::DispatcherMessage;
+use rand::{thread_rng, Rng};
 use std::sync::mpsc::{Receiver, Sender};
 
 use uuid::Uuid;
 
 use crate::message::Message;
 
-type State = bool;
-
 #[derive(Debug)]
 pub struct SendError<Message>(pub Message);
 
 pub struct AddressBook {
     pub self_rx: Receiver<Message>,
-    pub addresses: HashMap<Uuid, (Sender<Message>, State)>,
-    pub pub_tx: Sender<Message>,
+    pub dispatcher_tx: Sender<DispatcherMessage>,
+    pub addresses: Vec<Sender<Message>>,
+    pub islands: Vec<Uuid>,
 }
 
 impl AddressBook {
     pub fn new(
         self_rx: Receiver<Message>,
-        addresses: HashMap<Uuid, (Sender<Message>, State)>,
-        pub_tx: Sender<Message>,
+        dispatcher_tx: Sender<DispatcherMessage>,
+        addresses: Vec<Sender<Message>>,
+        islands: Vec<Uuid>,
     ) -> AddressBook {
         AddressBook {
             self_rx,
+            dispatcher_tx,
             addresses,
-            pub_tx,
+            islands,
         }
     }
 
-    /// Tries to send [`Message`] to random island. If no island is active
-    /// [`SendError`] with [`Message`] will be returned.
-    #[allow(unused_mut)]
-    pub fn send_to_rnd(&mut self, msg: Message) -> Result<(), SendError<Message>> {
-        match self.addresses.iter_mut().find(|&(_, (_, mut state))| state) {
-            Some((_island_uuid, (tx, state))) => match tx.send(msg) {
+    pub fn receive_messages(&self) -> Vec<Message> {
+        self.self_rx.try_iter().collect()
+    }
+
+    pub fn send_to_rnd_local(&mut self, msg: Message) -> Result<(), SendError<Message>> {
+        let island = thread_rng().gen_range(0, self.addresses.len());
+        match self.addresses.get(island) {
+            Some(tx) => match tx.send(msg) {
                 Ok(()) => Ok(()),
                 Err(e) => {
-                    *state = false;
-                    self.send_to_rnd(e.0)
+                    self.addresses.remove(island);
+                    self.islands.remove(island);
+                    self.send_to_rnd_local(e.0)
                 }
             },
             None => Err(SendError(msg)),
         }
     }
 
-    pub fn send_to_all(&mut self, msg: Message) {
-        self.addresses
-            .iter()
-            .filter(|&(_, (_, state))| *state)
-            .for_each(|(_, (tx, _))| tx.send(msg.clone()).unwrap());
-    }
-}
+    pub fn send_to_all_local(&mut self, msg: Message) -> Result<(), SendError<Message>> {
+        let mut counter = 0;
+        let mut id_to_remove = vec![];
 
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-    use std::sync::mpsc;
-    use std::sync::mpsc::{Receiver, Sender};
+        for i in 0..self.addresses.len() {
+            if let Some(tx) = self.addresses.get(i) {
+                match tx.send(msg.clone()) {
+                    Ok(()) => counter += 1,
+                    Err(_) => id_to_remove.push(i),
+                }
+            }
+        }
 
-    use uuid::Uuid;
+        id_to_remove.iter().for_each(|index| {
+            self.addresses.remove(*index);
+            self.islands.remove(*index);
+        });
 
-    use crate::address_book::{AddressBook, State};
-    use crate::message::Message;
-
-    #[test]
-    fn send_to_rnd_when_there_is_active_island_stress() -> Result<(), String> {
-        let (tx, rx) = mpsc::channel();
-        let mut addresses: HashMap<Uuid, (Sender<Message>, State)> = HashMap::new();
-        addresses.insert(Uuid::new_v4(), (tx.clone(), true));
-        let mut address_book: AddressBook = AddressBook {
-            self_rx: rx,
-            addresses,
-            pub_tx: tx.clone(),
-        };
-        match address_book.send_to_rnd(Message::FinSim) {
-            Ok(()) => Ok(()),
-            Err(_) => Err(String::from("send_to_rnd")),
+        if counter == 0 {
+            Err(SendError(msg))
+        } else {
+            Ok(())
         }
     }
 
-    #[test]
-    fn send_to_rnd_when_there_is_no_active_island_stress() -> Result<(), String> {
-        let (tx, rx) = mpsc::channel();
-        let mut addresses: HashMap<Uuid, (Sender<Message>, State)> = HashMap::new();
-        addresses.insert(Uuid::new_v4(), (tx.clone(), false));
-        let mut address_book: AddressBook = AddressBook {
-            self_rx: rx,
-            addresses,
-            pub_tx: tx.clone(),
-        };
-        match address_book.send_to_rnd(Message::FinSim) {
-            Ok(()) => Err(String::from("send_to_rnd")),
-            Err(_) => Ok(()),
-        }
+    pub fn send_to_rnd_global(&mut self, msg: Message) {
+        self.dispatcher_tx.send(DispatcherMessage::Random(msg)).unwrap();
     }
 
-    #[test]
-    fn send_to_rnd_island_state_update_stress() -> Result<(), String> {
-        let (tx, rx) = mpsc::channel();
-        let (_, rx_stub) = mpsc::channel();
-        let mut addresses: HashMap<Uuid, (Sender<Message>, State)> = HashMap::new();
-        addresses.insert(Uuid::new_v4(), (tx.clone(), true));
-        let mut address_book: AddressBook = AddressBook {
-            self_rx: rx_stub,
-            addresses,
-            pub_tx: tx.clone(),
-        };
-        drop(rx);
-        match address_book.send_to_rnd(Message::FinSim) {
-            Ok(()) => Err(String::from("send_to_rnd")),
-            Err(_) => Ok(()),
-        }
+    pub fn send_to_all_global(&mut self, msg: Message) {
+        self.dispatcher_tx.send(DispatcherMessage::Broadcast(msg)).unwrap();
     }
 }
