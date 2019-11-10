@@ -1,7 +1,8 @@
 use rust_in_peace::message::Message;
 use rust_in_peace::network::recv_rr;
 use rust_in_peace::settings::ServerSettings;
-use rust_in_peace::{network, utils};
+use rust_in_peace::{metrics, network, utils};
+use std::thread;
 use zmq::Socket;
 
 const LOGGER_LEVEL: &str = "info";
@@ -20,28 +21,32 @@ fn main() {
     network::bind_sock(&rep_sock, settings.ip.clone(), settings.rep_port);
     network::bind_sock(&pub_sock, settings.ip.clone(), settings.pub_port);
 
-    let from = format!("{}:{}", settings.ip, settings.pub_port);
-    log::info!("WAITING FOR HOSTS");
-    wait_for_hosts(&rep_sock, from.clone(), settings.hosts);
-    run(rep_sock, pub_sock, from, settings.hosts, settings.turns);
+    let metrics_addr = format!("{}:{}", settings.ip, settings.metrics_port);
+    thread::spawn(move || metrics::start_server(metrics_addr));
+
+    let from = settings.ip.clone();
+    let ips = wait_for_hosts(&rep_sock, from.clone(), settings.hosts);
+    run(rep_sock, pub_sock, from, ips, settings.turns);
 }
 
-fn wait_for_hosts(rep_sock: &Socket, from: String, hosts: u32) {
-    let mut host = 0;
-    while host < hosts {
-        let (recv_from, msg) = network::recv_rr(rep_sock);
+fn wait_for_hosts(rep_sock: &Socket, identity: String, hosts: u32) -> Vec<String> {
+    log::info!("WAITING FOR HOSTS");
+    let mut ips = vec![];
+    while ips.len() < hosts as usize {
+        let (from, msg) = network::recv_rr(rep_sock);
         match msg {
             Message::HostReady => {
-                host += 1;
-                network::send_rr(rep_sock, from.clone(), Message::Ok);
-                log::info!("{} {}", msg.as_string(), recv_from);
+                log::info!("{} {}", msg.as_string(), from);
+                ips.push(from);
+                network::send_rr(rep_sock, identity.clone(), Message::Ok);
             }
             _ => log::warn!("Unexpected msg"),
         }
     }
+    ips
 }
 
-fn run(rep_sock: Socket, pub_sock: Socket, from: String, hosts: u32, turns: u32) {
+fn run(rep_sock: Socket, pub_sock: Socket, from: String, ips: Vec<String>, turns: u32) {
     log::info!("START SIM");
     let key = String::from(network::SERVER_INFO_KEY);
     let mut turn = 0;
@@ -54,20 +59,21 @@ fn run(rep_sock: Socket, pub_sock: Socket, from: String, hosts: u32, turns: u32)
             Message::NextTurn(turn + 1),
         );
         turn += 1;
-        wait_for_confirmations(&rep_sock, from.clone(), hosts);
+        wait_for_confirmations(&rep_sock, from.clone(), ips.len() as u32);
     }
     log::info!("FIN SIM");
     network::send_ps(&pub_sock, key, from.clone(), Message::FinSim);
 }
 
-fn wait_for_confirmations(rep_sock: &Socket, from: String, hosts: u32) {
+fn wait_for_confirmations(rep_sock: &Socket, identity: String, hosts: u32) {
     let mut confirmation = 0;
     while confirmation < hosts {
-        let (_, msg) = recv_rr(rep_sock);
+        let (_from, msg) = recv_rr(rep_sock);
+        // metrics::inc_received_messages(from.clone(), identity.clone(),  String::from("200"));
         match msg {
             Message::TurnDone => {
                 confirmation += 1;
-                network::send_rr(rep_sock, from.clone(), Message::Ok);
+                network::send_rr(rep_sock, identity.clone(), Message::Ok);
             }
             _ => log::warn!("Unexpected message {:#?}", msg),
         }

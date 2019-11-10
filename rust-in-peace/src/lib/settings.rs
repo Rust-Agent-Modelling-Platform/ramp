@@ -17,6 +17,7 @@ pub struct Network {
     pub coordinator_rep_port: u32,
     pub host_ip: String,
     pub pub_port: u32,
+    pub metrics_port: u32,
     pub ips: Vec<String>,
     pub global_sync: GlobalSync,
 }
@@ -45,6 +46,7 @@ pub struct ServerSettings {
     pub ip: String,
     pub rep_port: u32,
     pub pub_port: u32,
+    pub metrics_port: u32,
 }
 
 impl ServerSettings {

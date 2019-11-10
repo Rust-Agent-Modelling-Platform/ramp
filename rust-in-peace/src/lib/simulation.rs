@@ -14,7 +14,7 @@ use crate::address_book::AddressBook;
 use crate::island::{IslandEnv, IslandFactory};
 use crate::message::Message;
 use crate::settings::ClientSettings;
-use crate::{network, utils};
+use crate::{metrics, network, utils};
 use std::time::Instant;
 
 type Port = u32;
@@ -43,7 +43,7 @@ impl Simulation {
 
         let host_ip = settings.network.host_ip.clone();
         let host_pub_port = settings.network.pub_port;
-        network::bind_sock(&pub_sock, host_ip, host_pub_port);
+        network::bind_sock(&pub_sock, host_ip.clone(), host_pub_port);
         connect(&sub_sock, &ips);
         subscribe(&sub_sock, &settings);
 
@@ -72,6 +72,11 @@ impl Simulation {
         }
 
         log::info!("Begin simulation");
+
+        let metrics_port = settings.network.metrics_port;
+        let metrics_addr = format!("{}:{}", host_ip.clone(), metrics_port);
+        thread::spawn(move || metrics::start_server(metrics_addr));
+
         start_simulation(
             settings,
             simulation_dir_path,
@@ -184,7 +189,7 @@ fn start_simulation(
         let stats_dir_path = utils::create_island_stats_dir(&simulation_dir_path, &island_id);
         let island_sync = islands_sync.clone();
 
-        let address_book = 
+        let address_book =
             create_address_book(&island_txes, &island_ids, island_no as i32, &dispatcher_tx);
 
         let island_rx = island_rxes.remove(0);
@@ -207,11 +212,12 @@ fn start_simulation(
         islands: island_ids.clone(),
     };
     let settings_copy = settings.clone();
+    let host_ip = settings.network.host_ip.clone();
     thread::spawn(move || {
         Dispatcher::create(dispatcher_rx, pub_sock, ips, settings_copy, srv_req_sock).start()
     });
     thread::spawn(move || {
-        Collector::create(collector_rx, sub_sock, collector_address_book).start()
+        Collector::create(collector_rx, sub_sock, collector_address_book, host_ip).start()
     });
 
     for thread in threads {
@@ -235,7 +241,9 @@ fn run_with_global_sync(
     while let (true, turn, messages) = receive_messages_with_global_sync(&island_rx) {
         island.do_turn(turn, messages);
         island_sync.as_ref().map(|barrier| barrier.wait());
-        dispatcher_tx.send(DispatcherMessage::Info(Message::TurnDone)).unwrap();
+        dispatcher_tx
+            .send(DispatcherMessage::Info(Message::TurnDone))
+            .unwrap();
     }
     island.finish();
 }
@@ -297,14 +305,14 @@ fn create_island_ids(islands_number: u32) -> Vec<Uuid> {
 }
 
 fn create_address_book(
-    txes: &Vec<Sender<Message>>,
-    island_ids: &Vec<Uuid>,
+    txes: &[Sender<Message>],
+    island_ids: &[Uuid],
     island_no: i32,
     dispatcher_tx: &Sender<DispatcherMessage>,
 ) -> AddressBook {
-    let mut txes_cp = txes.clone();
+    let mut txes_cp = txes.to_owned();
     txes_cp.remove(island_no as usize);
-    let mut island_ids_cp = island_ids.clone();
+    let mut island_ids_cp = island_ids.to_owned();
     island_ids_cp.remove(island_no as usize);
 
     AddressBook {

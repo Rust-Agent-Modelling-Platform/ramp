@@ -20,4 +20,6 @@ log = "0.4"
 chrono="0.4"
 csv="1.1"
 bincode = "1.1.4"
-
+lazy_static = "1.4.0"
+hyper = "0.12.35"
+prometheus = "0.7"

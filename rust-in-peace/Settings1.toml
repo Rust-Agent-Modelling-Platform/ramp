@@ -1,16 +1,17 @@
 turns = 400
-islands = 10
+islands = 3
 islands_sync = true
 stats_path = "stats"
 
 [network]
 is_coordinator = false
 hosts_num = 2
-coordinator_ip = "127.0.0.1"
+coordinator_ip = "127.0.0.2"
 coordinator_rep_port = 4002
-host_ip = "127.0.0.1"
+host_ip = "127.0.0.3"
 pub_port = 6005
-ips = ["127.0.0.1:6002", "127.0.0.1:5008"]
+metrics_port = 9898
+ips = ["127.0.0.4:6002", "127.0.0.2:5008"]
 
 [network.global_sync]
 sync = true

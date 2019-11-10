@@ -1,0 +1,6 @@
+hosts = 3
+turns = 400
+ip = "127.0.0.1"
+rep_port = 7001
+pub_port = 7002
+metrics_port = 9898
