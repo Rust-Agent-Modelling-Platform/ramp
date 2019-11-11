@@ -47,11 +47,11 @@ impl IslandEnv {
 }
 
 pub trait Island: Send {
+    fn on_start(&mut self);
+
     fn do_turn(&mut self, turn_number: u32, messages: Vec<Message>);
 
-    fn finish(&mut self);
-
-    fn get_island_env(&self) -> &IslandEnv;
+    fn on_finish(&mut self);
 }
 
 pub trait IslandFactory {

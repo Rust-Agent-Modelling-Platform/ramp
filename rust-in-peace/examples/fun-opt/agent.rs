@@ -1,6 +1,7 @@
 use rand::{thread_rng, Rng};
 use std::f64;
 use std::fmt;
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::action::Action;
@@ -11,7 +12,7 @@ use std::cell::RefCell;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Agent {
     pub id: Uuid,
-    pub settings: AgentSettings,
+    pub settings: Arc<AgentSettings>,
     pub energy: i32,
     pub genotype: Vec<f64>,
     pub fitness: f64,
@@ -20,7 +21,7 @@ pub struct Agent {
 impl Agent {
     pub fn new(
         id: Uuid,
-        config: AgentSettings,
+        config: Arc<AgentSettings>,
         genotype: Vec<f64>,
         calculate_fitness: &dyn Fn(&[f64]) -> f64,
         energy: i32,

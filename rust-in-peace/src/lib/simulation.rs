@@ -1,23 +1,22 @@
 use crate::collector::Collector;
 use crate::dispatcher::{Dispatcher, DispatcherMessage};
 use crate::island::Island;
-use std::net::IpAddr;
+use crate::network::CollectorNetworkCtx;
+use crate::network::DispatcherNetworkCtx;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Barrier};
 use std::thread;
 
 use uuid::Uuid;
-use zmq::Socket;
 
 use crate::address_book::AddressBook;
 use crate::island::{IslandEnv, IslandFactory};
 use crate::message::Message;
+use crate::network::NetworkCtx;
 use crate::settings::ClientSettings;
-use crate::{metrics, network, utils};
+use crate::{metrics, utils};
 use std::time::Instant;
-
-type Port = u32;
 
 const LOGGER_LEVEL: &str = "info";
 const EXPECTED_ARGS_NUM: usize = 3;
@@ -33,57 +32,19 @@ impl Simulation {
         let simulation_dir_path = utils::create_simulation_dir(&settings.stats_path.clone());
         utils::copy_simulation_settings(&simulation_dir_path, settings_file_name.clone());
 
-        let ips: Vec<(IpAddr, Port)> = parse_input_ips(&settings);
-        let context = zmq::Context::new();
-        let rep_sock = context.socket(zmq::REP).unwrap();
-        let req_sock = context.socket(zmq::REQ).unwrap();
-        let s_req_sock = context.socket(zmq::REQ).unwrap();
-        let pub_sock = context.socket(zmq::PUB).unwrap();
-        let sub_sock = context.socket(zmq::SUB).unwrap();
-
-        let host_ip = settings.network.host_ip.clone();
-        let host_pub_port = settings.network.pub_port;
-        network::bind_sock(&pub_sock, host_ip.clone(), host_pub_port);
-        connect(&sub_sock, &ips);
-        subscribe(&sub_sock, &settings);
-
-        if settings.network.is_coordinator {
-            let coord_ip = settings.network.coordinator_ip.clone();
-            let coord_rep_port = settings.network.coordinator_rep_port;
-            network::bind_sock(&rep_sock, coord_ip, coord_rep_port);
-            wait_for_hosts(&rep_sock, &settings);
-            notify_hosts(&pub_sock, &settings);
-        } else {
-            let coord_ip = settings.network.coordinator_ip.clone();
-            let coord_rep_port = settings.network.coordinator_rep_port;
-            network::connect_sock(&req_sock, coord_ip, coord_rep_port);
-            send_ready_msg(&req_sock, &settings);
-            wait_for_signal(&sub_sock);
-        }
-
-        if settings.network.global_sync.sync {
-            let server_ip = settings.network.global_sync.server_ip.clone();
-            let server_rep_port = settings.network.global_sync.server_rep_port;
-            let server_pub_port = settings.network.global_sync.server_pub_port;
-            network::connect_sock(&s_req_sock, server_ip.clone(), server_rep_port);
-            network::connect_sock(&sub_sock, server_ip, server_pub_port);
-            network::subscribe_sock(&sub_sock, String::from(network::SERVER_INFO_KEY));
-            send_ready_msg(&s_req_sock, &settings);
-        }
-
-        log::info!("Begin simulation");
+        log::info!("Initializing simulation");
+        let nt_settings = settings.network.clone();
+        let nt_ctx = NetworkCtx::new(nt_settings.clone());
+        let (dis_nt_ctx, coll_nt_ctx) = nt_ctx.init();
 
         let metrics_port = settings.network.metrics_port;
-        let metrics_addr = format!("{}:{}", host_ip.clone(), metrics_port);
+        let metrics_addr = format!("{}:{}", settings.network.host_ip.clone(), metrics_port);
         thread::spawn(move || metrics::start_server(metrics_addr));
-
-        start_simulation(
+        start(
             settings,
+            dis_nt_ctx,
+            coll_nt_ctx,
             simulation_dir_path,
-            sub_sock,
-            pub_sock,
-            ips,
-            s_req_sock,
             factory,
         );
     }
@@ -93,81 +54,12 @@ fn load_settings(file_name: String) -> ClientSettings {
     ClientSettings::new(file_name).unwrap()
 }
 
-fn parse_input_ips(settings: &ClientSettings) -> Vec<(IpAddr, Port)> {
-    let mut ips: Vec<(IpAddr, Port)> = Vec::new();
-    let ips_str: Vec<String> = settings.network.ips.clone();
-    for address in ips_str {
-        let split: Vec<&str> = address.split(':').collect();
-        ips.push((split[0].parse().unwrap(), split[1].parse().unwrap()));
-    }
-    ips
-}
-
-fn connect(sub: &Socket, ips: &[(IpAddr, Port)]) {
-    ips.iter()
-        .for_each(|(ip, port)| network::connect_sock(sub, ip.to_string(), *port));
-}
-
-fn subscribe(sub: &Socket, settings: &ClientSettings) {
-    let private_sub_key = format!(
-        "{}:{}",
-        settings.network.host_ip.to_string(),
-        settings.network.pub_port.to_string()
-    );
-    network::subscribe_sock(sub, private_sub_key);
-    network::subscribe_sock(sub, String::from(network::COORD_INFO_KEY));
-    network::subscribe_sock(sub, String::from(network::BROADCAST_KEY));
-}
-
-fn wait_for_hosts(rep: &Socket, settings: &ClientSettings) {
-    let mut count = 0;
-    while count != settings.network.hosts_num {
-        let from = rep.recv_msg(0).unwrap();
-        let msg = rep.recv_bytes(0).unwrap();
-
-        let d_msg: Message = bincode::deserialize(&msg).unwrap();
-        log::info!("{} {}", d_msg.as_string(), from.as_str().unwrap());
-
-        let from = settings.network.host_ip.clone();
-        let msg = Message::Ok;
-        network::send_rr(rep, from, msg);
-        count += 1;
-    }
-}
-
-fn notify_hosts(pub_sock: &Socket, settings: &ClientSettings) {
-    log::info!("Notifying hosts");
-    let key = String::from(network::COORD_INFO_KEY);
-    let from = settings.network.host_ip.clone();
-    let msg = Message::StartSim;
-
-    network::send_ps(pub_sock, key, from, msg);
-}
-
-fn send_ready_msg(req: &Socket, settings: &ClientSettings) {
-    log::info!("Sending host ready message");
-    let from = settings.network.host_ip.clone();
-    let msg = Message::HostReady;
-
-    network::send_rr(req, from, msg);
-    let (_, msg) = network::recv_rr(req);
-    log::info!("{}", msg.as_string());
-}
-
-fn wait_for_signal(sub: &Socket) {
-    log::info!("Waiting for signal to start sim");
-    let (_, _, msg) = network::recv_ps(sub);
-    log::info!("{}", msg.as_string());
-}
-
 #[allow(clippy::too_many_arguments)]
-fn start_simulation(
+fn start(
     settings: ClientSettings,
+    dis_nt_ctx: DispatcherNetworkCtx,
+    coll_nt_ctx: CollectorNetworkCtx,
     simulation_dir_path: String,
-    sub_sock: Socket,
-    pub_sock: Socket,
-    ips: Vec<(IpAddr, Port)>,
-    srv_req_sock: Socket,
     factory: Box<dyn IslandFactory>,
 ) {
     let (island_txes, mut island_rxes) = create_channels(settings.islands);
@@ -183,7 +75,8 @@ fn start_simulation(
         None
     };
 
-    for island_no in 0..settings.islands {
+    let islands = settings.islands;
+    for island_no in 0..islands {
         let turns = settings.turns;
         let island_id = island_ids[island_no as usize];
         let stats_dir_path = utils::create_island_stats_dir(&simulation_dir_path, &island_id);
@@ -206,19 +99,14 @@ fn start_simulation(
         threads.push(th_handler);
     }
 
-    let collector_address_book = AddressBook {
+    let coll_address_book = AddressBook {
         dispatcher_tx: mpsc::Sender::clone(&dispatcher_tx),
         addresses: island_txes.clone(),
         islands: island_ids.clone(),
     };
-    let settings_copy = settings.clone();
-    let host_ip = settings.network.host_ip.clone();
-    thread::spawn(move || {
-        Dispatcher::create(dispatcher_rx, pub_sock, ips, settings_copy, srv_req_sock).start()
-    });
-    thread::spawn(move || {
-        Collector::create(collector_rx, sub_sock, collector_address_book, host_ip).start()
-    });
+
+    thread::spawn(move || Dispatcher::new(dispatcher_rx, dis_nt_ctx, islands).start());
+    thread::spawn(move || Collector::new(collector_rx, coll_nt_ctx, coll_address_book).start());
 
     for thread in threads {
         thread.join().unwrap();
@@ -245,7 +133,7 @@ fn run_with_global_sync(
             .send(DispatcherMessage::Info(Message::TurnDone))
             .unwrap();
     }
-    island.finish();
+    island.on_finish();
 }
 
 fn run(
@@ -259,7 +147,7 @@ fn run(
         island.do_turn(turn, messages);
         island_sync.as_ref().map(|barrier| barrier.wait());
     }
-    island.finish();
+    island.on_finish();
 }
 
 type NextTurn = bool;

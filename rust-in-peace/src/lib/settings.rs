@@ -4,13 +4,13 @@ use config::{Config, ConfigError, File};
 pub struct ClientSettings {
     pub turns: u32,
     pub islands: u32,
-    pub network: Network,
+    pub network: NetworkSettings,
     pub islands_sync: bool,
     pub stats_path: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct Network {
+pub struct NetworkSettings {
     pub is_coordinator: bool,
     pub hosts_num: u32,
     pub coordinator_ip: String,
@@ -19,11 +19,11 @@ pub struct Network {
     pub pub_port: u32,
     pub metrics_port: u32,
     pub ips: Vec<String>,
-    pub global_sync: GlobalSync,
+    pub global_sync: GlobalSyncSettings,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct GlobalSync {
+pub struct GlobalSyncSettings {
     pub sync: bool,
     pub server_ip: String,
     pub server_rep_port: u32,

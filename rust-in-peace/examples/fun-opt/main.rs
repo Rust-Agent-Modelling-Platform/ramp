@@ -1,11 +1,11 @@
 #[macro_use]
 extern crate serde_derive;
 
-use uuid::Uuid;
-
 use rust_in_peace::island::{Island, IslandEnv, IslandFactory};
 use rust_in_peace::simulation::Simulation;
 use rust_in_peace::utils;
+use std::sync::Arc;
+use uuid::Uuid;
 
 use crate::myisland::MyIsland;
 use crate::settings::SimulationSettings;
@@ -32,7 +32,7 @@ impl IslandFactory for MyIslandFactory {
             island_env,
             &functions::rastrigin,
             settings.island_settings.agents_number,
-            settings.agent_settings,
+            Arc::new(settings.agent_settings),
         );
         Box::new(island)
     }

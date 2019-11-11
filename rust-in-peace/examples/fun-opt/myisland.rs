@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::process;
-use std::time::Instant;
+use std::sync::Arc;
 
 use colored::*;
 use rand::{thread_rng, Rng};
@@ -65,12 +65,14 @@ pub struct MyIsland {
     pub id: Uuid,
     pub id_agent_map: HashMap<Uuid, RefCell<Agent>>,
     pub action_queue: Vec<Action>,
-    pub agent_settings: AgentSettings,
+    pub agent_settings: Arc<AgentSettings>,
     pub stats: Stats,
     island_env: IslandEnv,
     id_queues: IdQueues,
 }
 impl Island for MyIsland {
+    fn on_start(&mut self) {}
+
     fn do_turn(&mut self, turn_number: u32, messages: Vec<Message>) {
         self.log_turn_start(turn_number);
 
@@ -85,11 +87,7 @@ impl Island for MyIsland {
         self.log_turn_end_and_update_best_agent();
     }
 
-    fn get_island_env(&self) -> &IslandEnv {
-        &self.island_env
-    }
-
-    fn finish(&mut self) {
+    fn on_finish(&mut self) {
         let duration = self.island_env.start_time.elapsed().as_secs();
         stats::generate_stat_files(&self, duration.clone(), &self.island_env.stats_dir_path);
 
@@ -113,7 +111,7 @@ impl MyIsland {
         island_env: IslandEnv,
         calculate_fitness: &dyn Fn(&[f64]) -> f64,
         agents_number: u32,
-        agent_settings: AgentSettings,
+        agent_settings: Arc<AgentSettings>,
     ) -> Self {
         MyIsland {
             id,
@@ -244,10 +242,6 @@ impl MyIsland {
             "Number of migrating agents this turn: {}",
             self.id_queues.migrating_ids.len()
         );
-        if self.island_env.get_active_islands_number() < 1 {
-            self.id_queues.migrating_ids.clear();
-            return;
-        }
         let mut local_migrations_num = 0;
         let mut global_migrations_num = 0;
         for id in &self.id_queues.migrating_ids {
@@ -299,22 +293,6 @@ impl MyIsland {
         self.id_queues.dead_ids.clear();
     }
 
-    fn finish(&self, start_time: Instant) {
-        let duration = start_time.elapsed().as_secs();
-        stats::generate_stat_files(&self, duration, &self.island_env.stats_dir_path);
-
-        log::info!("{}", "================= END =================".green());
-        log::info!("Time elapsed: {} seconds", start_time.elapsed().as_secs());
-        log::info!(
-            "At end of simulation the best agent is: {}",
-            stats::get_most_fit_agent(&self)
-                .borrow()
-                .fitness
-                .to_string()
-                .blue()
-        );
-    }
-
     fn resolve_messages(&mut self, messages: Vec<Message>) {
         let mut migrants_num = 0;
         for message in messages {
@@ -339,7 +317,7 @@ impl MyIsland {
 
     fn create_id_agent_map(
         agents_number: u32,
-        agent_config: &AgentSettings,
+        agent_config: &Arc<AgentSettings>,
         calculate_fitness: &dyn Fn(&[f64]) -> f64,
     ) -> HashMap<Uuid, RefCell<Agent>> {
         let mut id_agent_map: HashMap<Uuid, RefCell<Agent>> = HashMap::new();

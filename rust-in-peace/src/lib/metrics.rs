@@ -11,9 +11,6 @@ lazy_static! {
     .unwrap();
 }
 
-/// This function starts metrics server. For each request
-/// all metrics with their labels and values will be returned.
-/// ['address'] should be provided in "ip:port" format
 pub fn start_server(address: String) {
     let addr: SocketAddr = address.parse().unwrap();
     let new_service = || {

@@ -1,12 +1,8 @@
 use crate::message::Message;
 use crate::network;
-use crate::settings::ClientSettings;
+use crate::network::DispatcherNetworkCtx;
 use rand::{thread_rng, Rng};
-use std::net::IpAddr;
 use std::sync::mpsc::Receiver;
-use zmq::Socket;
-
-type Port = u32;
 
 #[derive(Debug)]
 pub enum DispatcherMessage {
@@ -17,26 +13,20 @@ pub enum DispatcherMessage {
 
 pub struct Dispatcher {
     rx: Receiver<DispatcherMessage>,
-    pub_sock: Socket,
-    ip_table: Vec<(IpAddr, Port)>,
-    settings: ClientSettings,
-    srv_req_sock: Socket,
+    nt_ctx: DispatcherNetworkCtx,
+    islands: u32,
 }
 
 impl Dispatcher {
-    pub fn create(
+    pub fn new(
         rx: Receiver<DispatcherMessage>,
-        pub_sock: Socket,
-        ip_table: Vec<(IpAddr, Port)>,
-        settings: ClientSettings,
-        srv_req_sock: Socket,
+        nt_ctx: DispatcherNetworkCtx,
+        islands: u32,
     ) -> Dispatcher {
         Dispatcher {
             rx,
-            pub_sock,
-            ip_table,
-            settings,
-            srv_req_sock,
+            nt_ctx,
+            islands,
         }
     }
 
@@ -44,27 +34,31 @@ impl Dispatcher {
         log::info!("Dispatcher started");
         let mut fin_sim = false;
         let mut confirmations = 0;
-        let from = self.settings.network.host_ip.clone();
+        let from = self.nt_ctx.nt_sett.host_ip.clone();
         while !fin_sim {
             let incoming = self.rx.try_iter();
             for msg in incoming {
                 match msg {
                     DispatcherMessage::Random(Message::Agent(_)) => {
-                        let random_index = thread_rng().gen_range(0, self.ip_table.len());
-                        let (ip, port) = self.ip_table[random_index];
+                        let random_index = thread_rng().gen_range(0, self.nt_ctx.ip_table.len());
+                        let (ip, port) = self.nt_ctx.ip_table[random_index];
                         let key = format!("{}:{}", ip.to_string(), port.to_string());
 
-                        network::send_ps(&self.pub_sock, key, from.clone(), msg.into());
+                        network::send_ps(&self.nt_ctx.pub_sock, key, from.clone(), msg.into());
                     }
                     DispatcherMessage::Broadcast(Message::Agent(_)) => {
                         let key = String::from(network::BROADCAST_KEY);
-                        network::send_ps(&self.pub_sock, key, from.clone(), msg.into())
+                        network::send_ps(&self.nt_ctx.pub_sock, key, from.clone(), msg.into())
                     }
                     DispatcherMessage::Info(Message::TurnDone) => {
                         confirmations += 1;
-                        if confirmations == self.settings.islands {
-                            network::send_rr(&self.srv_req_sock, from.clone(), Message::TurnDone);
-                            let (_, _) = network::recv_rr(&self.srv_req_sock);
+                        if confirmations == self.islands {
+                            network::send_rr(
+                                &self.nt_ctx.s_req_sock,
+                                from.clone(),
+                                Message::TurnDone,
+                            );
+                            let (_, _) = network::recv_rr(&self.nt_ctx.s_req_sock);
                             confirmations = 0;
                         }
                     }

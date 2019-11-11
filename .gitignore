@@ -1,5 +1,5 @@
-/target
+target/
+stats/
 **/*.rs.bk
 Cargo.lock
 .idea/
-stats/

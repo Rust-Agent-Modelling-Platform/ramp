@@ -14,7 +14,7 @@ metrics_port = 9898
 ips = ["127.0.0.4:6002", "127.0.0.2:5008"]
 
 [network.global_sync]
-sync = true
+sync = false
 server_ip = "127.0.0.1"
 server_rep_port = 7001
 server_pub_port = 7002
