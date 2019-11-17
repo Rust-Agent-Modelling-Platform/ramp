@@ -15,10 +15,10 @@ pub struct NetworkSettings {
     pub hosts_num: u32,
     pub coordinator_ip: String,
     pub coordinator_rep_port: u32,
+    pub coordinator_pub_port: u32,
     pub host_ip: String,
     pub pub_port: u32,
     pub metrics_port: u32,
-    pub ips: Vec<String>,
     pub global_sync: GlobalSyncSettings,
 }
 

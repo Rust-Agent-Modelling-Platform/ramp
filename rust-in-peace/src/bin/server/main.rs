@@ -25,28 +25,14 @@ fn main() {
     thread::spawn(move || metrics::start_server(metrics_addr));
 
     let from = settings.ip.clone();
-    let ips = wait_for_hosts(&rep_sock, from.clone(), settings.hosts);
-    run(rep_sock, pub_sock, from, ips, settings.turns);
+    let ip_table = network::wait_for_hosts(&rep_sock, &from, settings.hosts);
+    network::publish_ip_table(&pub_sock, &from, &ip_table);
+    network::wait_for_confirmations(&rep_sock, &from, settings.hosts);
+
+    run(rep_sock, pub_sock, from, settings.hosts, settings.turns);
 }
 
-fn wait_for_hosts(rep_sock: &Socket, identity: String, hosts: u32) -> Vec<String> {
-    log::info!("WAITING FOR HOSTS");
-    let mut ips = vec![];
-    while ips.len() < hosts as usize {
-        let (from, msg) = network::recv_rr(rep_sock);
-        match msg {
-            Message::HostReady => {
-                log::info!("{} {}", msg.as_string(), from);
-                ips.push(from);
-                network::send_rr(rep_sock, identity.clone(), Message::Ok);
-            }
-            _ => log::warn!("Unexpected msg"),
-        }
-    }
-    ips
-}
-
-fn run(rep_sock: Socket, pub_sock: Socket, from: String, ips: Vec<String>, turns: u32) {
+fn run(rep_sock: Socket, pub_sock: Socket, from: String, hosts: u32, turns: u32) {
     log::info!("START SIM");
     let key = String::from(network::SERVER_INFO_KEY);
     let mut turn = 0;
@@ -59,7 +45,7 @@ fn run(rep_sock: Socket, pub_sock: Socket, from: String, ips: Vec<String>, turns
             Message::NextTurn(turn + 1),
         );
         turn += 1;
-        wait_for_confirmations(&rep_sock, from.clone(), ips.len() as u32);
+        wait_for_confirmations(&rep_sock, from.clone(), hosts);
     }
     log::info!("FIN SIM");
     network::send_ps(&pub_sock, key, from.clone(), Message::FinSim);

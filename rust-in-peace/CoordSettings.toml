@@ -8,13 +8,13 @@ is_coordinator = true
 hosts_num = 2
 coordinator_ip = "127.0.0.2"
 coordinator_rep_port = 4002
+coordinator_pub_port = 5008
 host_ip = "127.0.0.2"
 pub_port = 5008
 metrics_port = 9898
-ips = ["127.0.0.3:6005", "127.0.0.4:6002"]
 
 [network.global_sync]
-sync = false
+sync = true
 server_ip = "127.0.0.1"
 server_rep_port = 7001
 server_pub_port = 7002

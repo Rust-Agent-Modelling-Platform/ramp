@@ -41,10 +41,15 @@ impl Dispatcher {
                 match msg {
                     DispatcherMessage::Random(Message::Agent(_)) => {
                         let random_index = thread_rng().gen_range(0, self.nt_ctx.ip_table.len());
-                        let (ip, port) = self.nt_ctx.ip_table[random_index];
-                        let key = format!("{}:{}", ip.to_string(), port.to_string());
+                        let (ip, port) = &self.nt_ctx.ip_table[random_index];
+                        let key = format!("{}:{}", ip, port);
 
-                        network::send_ps(&self.nt_ctx.pub_sock, key, from.clone(), msg.into());
+                        network::send_ps(
+                            &self.nt_ctx.pub_sock,
+                            key.clone(),
+                            from.clone(),
+                            msg.into(),
+                        );
                     }
                     DispatcherMessage::Broadcast(Message::Agent(_)) => {
                         let key = String::from(network::BROADCAST_KEY);
