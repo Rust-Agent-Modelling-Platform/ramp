@@ -26,4 +26,10 @@ services:
       - UPDATE_URL=http://localhost:9091/graph
       - INTERVAL=10000
       - MAX_REPLAY_OFFSET=43200
+  grafana:
+    container_name: grafana
+    image: grafana/grafana
+    network_mode: "host"
+    ports:
+      - 3000
       
