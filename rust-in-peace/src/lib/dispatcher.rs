@@ -55,6 +55,15 @@ impl Dispatcher {
                         let key = String::from(network::BROADCAST_KEY);
                         network::send_ps(&self.nt_ctx.pub_sock, key, from.clone(), msg.into())
                     }
+                    DispatcherMessage::Broadcast(Message::Islands(_)) => {
+                        let key = String::from(network::BROADCAST_KEY);
+                        network::send_ps(&self.nt_ctx.pub_sock, key, from.clone(), msg.into())
+                    }
+                    DispatcherMessage::Broadcast(Message::Owners(_)) => {
+                        log::info!("OWNERS MSG");
+                        let key = String::from(network::BROADCAST_KEY);
+                        network::send_ps(&self.nt_ctx.pub_sock, key, from.clone(), msg.into())
+                    }
                     DispatcherMessage::Info(Message::TurnDone) => {
                         confirmations += 1;
                         if confirmations == self.islands {

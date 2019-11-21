@@ -19,6 +19,7 @@ pub struct NetworkSettings {
     pub pub_port: u32,
     pub metrics_port: u32,
     pub global_sync: GlobalSyncSettings,
+    pub map: MapSettings,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -27,6 +28,11 @@ pub struct GlobalSyncSettings {
     pub server_ip: String,
     pub server_rep_port: u32,
     pub server_pub_port: u32,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct MapSettings {
+    pub chunk_len: u64,
 }
 
 impl ClientSettings {

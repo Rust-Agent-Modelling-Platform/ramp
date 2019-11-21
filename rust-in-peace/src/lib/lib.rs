@@ -15,3 +15,4 @@ pub mod network;
 pub mod settings;
 pub mod simulation;
 pub mod utils;
+pub mod map;

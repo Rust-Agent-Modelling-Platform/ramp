@@ -43,6 +43,20 @@ impl AddressBook {
         }
     }
 
+    pub fn send_to_local(&mut self, island_id: Uuid, msg: Message) -> Result<(), SendError<Message>> {
+        let island = self.islands.iter().position(|&id| id == island_id).unwrap();
+
+        match self.addresses.get(island) {
+            Some(tx) => match tx.send(msg) {
+                Ok(()) => Ok(()),
+                Err(e) => {
+                    Err(SendError(e.0))
+                }
+            },
+            None => Err(SendError(msg)),
+        }
+    }
+
     pub fn send_to_all_local(&mut self, msg: Message) -> Result<(), SendError<Message>> {
         let mut counter = 0;
         let mut id_to_remove = vec![];

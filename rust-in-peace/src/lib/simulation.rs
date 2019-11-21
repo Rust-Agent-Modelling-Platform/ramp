@@ -12,12 +12,14 @@ use uuid::Uuid;
 
 use crate::address_book::AddressBook;
 use crate::island::{IslandEnv, IslandFactory};
+use crate::map::{MapOwners, Fragment, FragmentOwner, Map};
 use crate::message::Message;
 use crate::metrics::MetricHub;
 use crate::network::NetworkCtx;
 use crate::settings::ClientSettings;
-use crate::{metrics, utils};
+use crate::{metrics, utils, network};
 use std::time::Instant;
+use std::collections::HashMap;
 
 const LOGGER_LEVEL: &str = "info";
 const EXPECTED_ARGS_NUM: usize = 3;
@@ -75,6 +77,40 @@ fn start(
     };
 
     let islands = settings.islands;
+    let is_coordinator = dis_nt_ctx.nt_sett.is_coordinator;
+    let host_ip = dis_nt_ctx.nt_sett.host_ip.clone();
+    let host_port = dis_nt_ctx.nt_sett.pub_port;
+    let mut ip_table = dis_nt_ctx.ip_table.clone();
+
+    let coll_address_book = AddressBook {
+        dispatcher_tx: mpsc::Sender::clone(&dispatcher_tx),
+        addresses: island_txes.clone(),
+        islands: island_ids.clone(),
+    };
+
+    thread::spawn(move || Dispatcher::new(dispatcher_rx, dis_nt_ctx, islands).start());
+
+    let mut map_owners: MapOwners = HashMap::new();
+    if !is_coordinator {
+        dispatcher_tx.send(DispatcherMessage::Broadcast(Message::Islands(island_ids.clone()))).unwrap();
+
+        loop {
+            let (_, _, msg) = network::recv_ps(&coll_nt_ctx.sub_sock);
+            if let Message::Owners(owners) = msg {
+                map_owners = owners;
+                break;
+            }
+        }
+    } else {
+        ip_table.push((host_ip, host_port));
+
+        map_owners = create_map_owners(&coll_nt_ctx.sub_sock, island_ids.clone(), settings.network.hosts_num, ip_table, settings.network.map.chunk_len);
+        dispatcher_tx.send(DispatcherMessage::Broadcast(Message::Owners(map_owners.clone()))).unwrap();
+    }
+
+    thread::spawn(move || Collector::new(collector_rx, coll_nt_ctx, coll_address_book).start());
+
+    let islands = settings.islands;
     for island_no in 0..islands {
         let turns = settings.turns;
         let island_id = island_ids[island_no as usize];
@@ -84,6 +120,10 @@ fn start(
             create_address_book(&island_txes, &island_ids, island_no as i32, &dispatcher_tx);
 
         let island_rx = island_rxes.remove(0);
+
+        let map = Map::new(settings.network.map.chunk_len, map_owners.clone());
+        let fragment_owner: FragmentOwner = (settings.network.host_ip.clone(), settings.network.pub_port, island_id);
+
         let island_env = IslandEnv::new(address_book, Arc::clone(&metrics), Instant::now());
         let island = factory.create(island_id, island_env);
         let dispatcher_tx_cp = mpsc::Sender::clone(&dispatcher_tx);
@@ -96,15 +136,6 @@ fn start(
         };
         threads.push(th_handler);
     }
-
-    let coll_address_book = AddressBook {
-        dispatcher_tx: mpsc::Sender::clone(&dispatcher_tx),
-        addresses: island_txes.clone(),
-        islands: island_ids.clone(),
-    };
-
-    thread::spawn(move || Dispatcher::new(dispatcher_rx, dis_nt_ctx, islands).start());
-    thread::spawn(move || Collector::new(collector_rx, coll_nt_ctx, coll_address_book).start());
 
     for thread in threads {
         thread.join().unwrap();

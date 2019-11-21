@@ -1,6 +1,7 @@
 use crate::message::Message;
 use crate::settings::NetworkSettings;
 use zmq::Socket;
+use uuid::Uuid;
 
 type Key = String;
 type From = String;
