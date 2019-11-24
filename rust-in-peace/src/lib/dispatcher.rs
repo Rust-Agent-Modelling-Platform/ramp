@@ -1,12 +1,15 @@
 use crate::message::Message;
 use crate::network;
-use crate::network::DispatcherNetworkCtx;
+use crate::network::{DispatcherNetworkCtx, Ip, Port};
 use rand::{thread_rng, Rng};
 use std::sync::mpsc::Receiver;
 
+pub type Addr = (Ip, Port);
+
 #[derive(Debug)]
 pub enum DispatcherMessage {
-    Random(Message),
+    UnicastRandom(Message),
+    Unicast(Message, Addr),
     Broadcast(Message),
     Info(Message),
 }
@@ -39,7 +42,7 @@ impl Dispatcher {
             let incoming = self.rx.try_iter();
             for msg in incoming {
                 match msg {
-                    DispatcherMessage::Random(Message::Agent(_)) => {
+                    DispatcherMessage::UnicastRandom(Message::Agent(_)) => {
                         let random_index = thread_rng().gen_range(0, self.nt_ctx.ip_table.len());
                         let (ip, port) = &self.nt_ctx.ip_table[random_index];
                         let key = format!("{}:{}", ip, port);
@@ -50,6 +53,10 @@ impl Dispatcher {
                             from.clone(),
                             msg.into(),
                         );
+                    }
+                    DispatcherMessage::Unicast(msg, addr) => {
+                        let key = format!("{}:{}", addr.0, addr.1);
+                        network::send_ps(&self.nt_ctx.pub_sock, key, from.clone(), msg.into())
                     }
                     DispatcherMessage::Broadcast(Message::Agent(_)) => {
                         let key = String::from(network::BROADCAST_KEY);
@@ -92,7 +99,8 @@ impl Dispatcher {
 impl Into<Message> for DispatcherMessage {
     fn into(self) -> Message {
         match self {
-            DispatcherMessage::Random(msg) => msg,
+            DispatcherMessage::UnicastRandom(msg) => msg,
+            DispatcherMessage::Unicast(msg, addr) => msg,
             DispatcherMessage::Broadcast(msg) => msg,
             DispatcherMessage::Info(msg) => msg,
         }

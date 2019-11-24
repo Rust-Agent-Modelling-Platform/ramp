@@ -1,4 +1,4 @@
-use crate::dispatcher::DispatcherMessage;
+use crate::dispatcher::{DispatcherMessage, Addr};
 use rand::{thread_rng, Rng};
 use std::sync::mpsc::Sender;
 
@@ -82,9 +82,15 @@ impl AddressBook {
         }
     }
 
+    pub fn send_to_global(&mut self, addr: Addr, msg: Message) {
+        self.dispatcher_tx
+            .send(DispatcherMessage::Unicast(msg, addr))
+            .unwrap();
+    }
+
     pub fn send_to_rnd_global(&mut self, msg: Message) {
         self.dispatcher_tx
-            .send(DispatcherMessage::Random(msg))
+            .send(DispatcherMessage::UnicastRandom(msg))
             .unwrap();
     }
 

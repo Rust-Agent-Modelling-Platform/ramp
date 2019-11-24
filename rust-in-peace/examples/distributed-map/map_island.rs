@@ -19,7 +19,15 @@ impl Island for MapIsland {
     }
 
     fn do_turn(&mut self, turn_number: u32, messages: Vec<Message>) {
-        
+        // here user has to receive MapSet msg and insert received value into map
+        for msg in messages {
+            match msg {
+                Message::MapSet(x, y, val) => {
+                    self.map.as_mut().map(|map| map.set(&mut self.island_env, x, y, val))
+                }
+                _ => println!("Other msg")
+            }
+        }
     }
 
     fn on_finish(&mut self) {

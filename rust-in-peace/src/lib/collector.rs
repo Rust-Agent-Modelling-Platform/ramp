@@ -79,6 +79,11 @@ impl Collector {
                             log::info!("{:?} (No more active islands in system)", e);
                         }
                     }
+                    Message::MapSet(_, _, _) => {
+                        if let Err(e) = self.address_book.send_to_rnd_local(msg) {
+                            log::info!("{:?} (No more active ilsands in system)", e);
+                        }
+                    }
                     _ => log::warn!("Unexpected message in collector {:#?}", msg),
                 }
             }

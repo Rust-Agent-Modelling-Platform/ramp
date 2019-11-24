@@ -3,6 +3,7 @@ use crate::island::IslandEnv;
 
 use uuid::Uuid;
 use std::collections::HashMap;
+use crate::message::Message;
 
 pub type Fragment = std::ops::Range<u64>;
 pub type FragmentOwner = (Ip, Port, Uuid);
@@ -39,7 +40,7 @@ impl MapInstance {
         }
     }
 
-    pub fn set(&mut self, island_env: & IslandEnv, x: u64, y: u64, val: u64) {
+    pub fn set(&mut self, island_env: &mut IslandEnv, x: u64, y: u64, val: u64) {
         let offset = self.pos_to_offset(x, y);
         let range = self.map.owners.keys().find(|&r| r.contains(&offset)).unwrap();
 
@@ -50,8 +51,10 @@ impl MapInstance {
             self.data[offset as usize] = val;
         } else if other_ip == my_ip {
             // TODO: Sending between islands on host
+            island_env.send_to_local(*other_island_id, Message::MapSet(x, y, val));
         } else {
             // TODO: Sending between hosts
+            island_env.send_to_global((other_ip.clone(), other_port.clone()), Message::MapSet(x, y, val));
         }
     }
 

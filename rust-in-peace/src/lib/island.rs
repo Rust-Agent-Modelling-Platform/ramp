@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::address_book::AddressBook;
 use crate::metrics::MetricHub;
 use std::time::Instant;
+use crate::dispatcher::Addr;
 
 pub struct IslandEnv {
     address_book: AddressBook,
@@ -41,6 +42,10 @@ impl IslandEnv {
 
     pub fn send_to_all_global(&mut self, msg: Message) {
         self.address_book.send_to_all_global(msg);
+    }
+
+    pub fn send_to_global(&mut self, addr: Addr, msg: Message) {
+        self.address_book.send_to_global(addr, msg);
     }
 
     pub fn get_active_islands_number(&self) -> i32 {
