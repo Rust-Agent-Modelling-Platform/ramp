@@ -1,5 +1,6 @@
 [island_settings]
-agents_number = 50
+agents_number = 5
+grass_interval = 10
 
 [sheep_settings]
 init_num = 5

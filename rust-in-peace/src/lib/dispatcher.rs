@@ -12,6 +12,7 @@ pub enum DispatcherMessage {
     Unicast(Message, Addr),
     Broadcast(Message),
     Info(Message),
+    Server(Message)
 }
 
 pub struct Dispatcher {
@@ -62,15 +63,24 @@ impl Dispatcher {
                         let key = String::from(network::BROADCAST_KEY);
                         network::send_ps(&self.nt_ctx.pub_sock, key, from.clone(), msg.into())
                     }
-                    DispatcherMessage::Broadcast(Message::Islands(_)) => {
+                    DispatcherMessage::Broadcast(Message::Islands(island_ids)) => {
+                        log::info!("ISLANDS MSG");
                         let key = String::from(network::BROADCAST_KEY);
-                        network::send_ps(&self.nt_ctx.pub_sock, key, from.clone(), msg.into())
+                        network::send_ps(&self.nt_ctx.pub_sock, key.clone(), from.clone(), Message::Islands(island_ids.clone()));
                     }
                     DispatcherMessage::Broadcast(Message::Owners(_)) => {
                         log::info!("OWNERS MSG");
                         let key = String::from(network::BROADCAST_KEY);
                         network::send_ps(&self.nt_ctx.pub_sock, key, from.clone(), msg.into())
                     }
+                    DispatcherMessage::Info(Message::HostReady) => {
+                        network::send_rr(&self.nt_ctx.s_req_sock,
+                                         from.clone(),
+                                         Message::HostReady
+                        );
+                        let (_, _) = network::recv_rr(&self.nt_ctx.s_req_sock);
+                    }
+
                     DispatcherMessage::Info(Message::TurnDone) => {
                         confirmations += 1;
                         if confirmations == self.islands {
@@ -100,9 +110,10 @@ impl Into<Message> for DispatcherMessage {
     fn into(self) -> Message {
         match self {
             DispatcherMessage::UnicastRandom(msg) => msg,
-            DispatcherMessage::Unicast(msg, addr) => msg,
+            DispatcherMessage::Unicast(msg, _addr) => msg,
             DispatcherMessage::Broadcast(msg) => msg,
             DispatcherMessage::Info(msg) => msg,
+            DispatcherMessage::Server(msg) => msg
         }
     }
 }

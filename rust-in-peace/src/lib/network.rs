@@ -1,7 +1,6 @@
 use crate::message::Message;
 use crate::settings::NetworkSettings;
 use zmq::Socket;
-use uuid::Uuid;
 
 type Key = String;
 type From = String;
@@ -12,6 +11,7 @@ pub const BROADCAST_KEY: &str = "BROADCAST";
 
 pub fn connect_sock(sock: &Socket, ip: &str, port: u32) {
     let address = &format!("tcp://{}:{}", ip.to_string(), port);
+    println!("CONNECTION TO {}", &address);
     assert!(sock.connect(address).is_ok());
 }
 
@@ -130,7 +130,9 @@ impl NetworkCtx {
             self.send_hello_msg(&self.s_req_sock);
             ip_table = self.wait_for_ip_table();
             self.connect(&ip_table);
-            self.send_ready_msg(&self.s_req_sock);
+
+
+            //self.send_ready_msg(&self.s_req_sock);
         } else if self.settings.is_coordinator {
             let coord_ip = self.settings.coordinator_ip.clone();
             let coord_rep_port = self.settings.coordinator_rep_port;

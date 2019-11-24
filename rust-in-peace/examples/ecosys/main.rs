@@ -14,6 +14,8 @@ mod sheep;
 mod wolves;
 mod ws_island;
 mod settings;
+mod ws_utils;
+mod agent_types;
 
 struct WSIslandFactory;
 const EXPECTED_ARGS_NUM: usize = 3;
@@ -27,6 +29,7 @@ impl IslandFactory for WSIslandFactory {
         let island = WSIsland::new(
             id,
             island_env,
+            Arc::new(settings.island_settings),
             Arc::new(settings.sheep_settings),
             Arc::new(settings.wolf_settings) );
 

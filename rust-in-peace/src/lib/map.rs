@@ -27,7 +27,7 @@ impl Map {
 #[derive(Debug, Clone)]
 pub struct MapInstance {
     pub map: Map,
-    pub data: Vec<u64>,
+    pub data: Vec<i32>,
     pub fragment_owner: FragmentOwner,
 }
 
@@ -40,7 +40,7 @@ impl MapInstance {
         }
     }
 
-    pub fn set(&mut self, island_env: &mut IslandEnv, x: u64, y: u64, val: u64) {
+    pub fn set(&mut self, island_env: &mut IslandEnv, x: u64, y: u64, val: i32) {
         let offset = self.pos_to_offset(x, y);
         let range = self.map.owners.keys().find(|&r| r.contains(&offset)).unwrap();
 
@@ -69,6 +69,21 @@ impl MapInstance {
         (x, y)
     }
 
+    pub fn init_with_val(&mut self, val: i32) {
+        for i in 0..self.data.len() {
+            self.data[i] = val;
+        }
+    }
+
+    pub fn get_my_range(&self) -> Fragment {
+        let (_, _, my_island_id) = &self.fragment_owner;
+        let range =
+            self.map.owners
+                .keys()
+                .find(|&k| self.map.owners.get(k).unwrap().2 == *my_island_id).unwrap();
+        range.clone()
+    }
+
     pub fn get_neighbourhood(&self, x: u64, y: u64) -> Vec<(u64, u64)> {
         unimplemented!();
     }
@@ -78,10 +93,6 @@ impl MapInstance {
     }
 
     pub fn update_value(&mut self, x: u64, y: u64) {
-        unimplemented!();
-    }
-
-    pub fn get_range(&self) {
         unimplemented!();
     }
 

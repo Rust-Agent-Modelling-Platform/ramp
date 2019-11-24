@@ -20,6 +20,8 @@ use crate::settings::ClientSettings;
 use crate::{metrics, utils, network};
 use std::time::Instant;
 use std::collections::HashMap;
+use core::time;
+use zmq::Socket;
 
 const LOGGER_LEVEL: &str = "info";
 const EXPECTED_ARGS_NUM: usize = 3;
@@ -89,25 +91,29 @@ fn start(
     };
 
     thread::spawn(move || Dispatcher::new(dispatcher_rx, dis_nt_ctx, islands).start());
+    let ten_millis = time::Duration::from_millis(10);
+    thread::sleep(ten_millis);
 
     let mut map_owners: MapOwners = HashMap::new();
     if !is_coordinator {
         dispatcher_tx.send(DispatcherMessage::Broadcast(Message::Islands(island_ids.clone()))).unwrap();
-
-        loop {
-            let (_, _, msg) = network::recv_ps(&coll_nt_ctx.sub_sock);
-            if let Message::Owners(owners) = msg {
-                map_owners = owners;
-                break;
-            }
+        let (_, _, msg) = network::recv_ps(&coll_nt_ctx.sub_sock);
+        if let Message::Owners(owners) = msg {
+            map_owners = owners;
         }
+
     } else {
         ip_table.push((host_ip, host_port));
-
         map_owners = create_map_owners(&coll_nt_ctx.sub_sock, island_ids.clone(), settings.network.hosts_num, ip_table, settings.network.map.chunk_len);
         dispatcher_tx.send(DispatcherMessage::Broadcast(Message::Owners(map_owners.clone()))).unwrap();
     }
 
+    //Only now can we tell the server we are ready
+    log::info!("Sending ready message");
+    dispatcher_tx.send(DispatcherMessage::Info(Message::HostReady)).unwrap();
+
+
+    // ============================== Spawning and starting islands ==========================================================
     thread::spawn(move || Collector::new(collector_rx, coll_nt_ctx, coll_address_book).start());
 
     let islands = settings.islands;
@@ -240,3 +246,37 @@ fn create_address_book(
         islands: island_ids_cp,
     }
 }
+
+fn create_map_owners(
+    coll_sub_sock: &Socket,
+    island_ids: Vec<Uuid>,
+    hosts_num: u32,
+    ip_table: Vec<(String, network::Port)>,
+    map_size: u64
+) -> MapOwners {
+    let mut owners: MapOwners = HashMap::new();
+    let mut ip_islands: HashMap<String, Vec<Uuid>> = HashMap::new();
+        for _ in 0..hosts_num - 1  {
+            if hosts_num == 1 {break;}
+            let (_, from, msg) = network::recv_ps(coll_sub_sock);
+            if let Message::Islands(island_ids) = msg {
+                ip_islands.insert(from, island_ids);
+            }
+        }
+
+        let mut start = 0;
+        let mut end = map_size * map_size;
+
+        for (addr, port) in ip_table {
+            let islands = ip_islands.get(&addr).unwrap_or(&island_ids);
+            for island in islands {
+                let fragment = Fragment { start, end };
+                let owner = (addr.clone(), port, island.clone());
+
+                owners.insert(fragment, owner);
+                start = end;
+                end += map_size * map_size;
+            }
+        }
+        owners
+    }

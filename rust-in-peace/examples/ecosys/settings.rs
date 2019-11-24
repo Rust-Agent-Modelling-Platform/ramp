@@ -10,14 +10,13 @@ pub struct SimulationSettings {
 #[derive(Debug, Deserialize, Copy, Clone)]
 pub struct IslandSettings {
     pub agents_number: u32,
-    pub grass_regrowth_time: u32
+    pub grass_interval: i32
 }
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub struct SheepSettings {
     pub init_num: u32,
     pub init_energy: u64,
-    pub init_fitness: u32,
     pub reproduction_chance: f64,
     pub energy_gain: u64,
     pub energy_loss: u64
@@ -27,7 +26,6 @@ pub struct SheepSettings {
 pub struct WolfSettings {
     pub init_num: u32,
     pub init_energy: u64,
-    pub init_fitness: u32,
     pub reproduction_chance: f64,
     pub energy_gain: u64,
     pub energy_loss: u64
