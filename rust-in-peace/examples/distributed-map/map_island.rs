@@ -12,9 +12,7 @@ pub struct MapIsland {
 impl Island for MapIsland {
     fn on_start(&mut self) {
         let map = MapInstance::get_instance(&self.island_env);
-
         log::warn!("{:#?}", map);
-
         self.map = Some(map);
     }
 

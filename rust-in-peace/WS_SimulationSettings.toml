@@ -1,0 +1,16 @@
+[island_settings]
+agents_number = 50
+
+[sheep_settings]
+init_num = 5
+init_energy = 100
+reproduction_chance = 0.01
+energy_gain = 2
+energy_loss = 1
+
+[wolf_settings]
+init_num = 5
+init_energy = 100
+reproduction_chance = 0.01
+energy_gain = 20
+energy_loss = 1

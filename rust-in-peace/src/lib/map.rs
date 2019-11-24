@@ -11,24 +11,24 @@ pub type MapOwners = HashMap<Fragment, FragmentOwner>;
 
 #[derive(Debug, Clone)]
 pub struct Map {
-    owners: MapOwners,
-    chunk_len: u64,
+    pub owners: MapOwners,
+    chunk_len: u64
 }
 
 impl Map {
     pub fn new(chunk_len: u64, owners: MapOwners) -> Self {
         Self {
             chunk_len,
-            owners,
+            owners
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct MapInstance {
-    map: Map,
-    data: Vec<u64>,
-    fragment_owner: FragmentOwner,
+    pub map: Map,
+    pub data: Vec<u64>,
+    pub fragment_owner: FragmentOwner,
 }
 
 impl MapInstance {
@@ -68,4 +68,21 @@ impl MapInstance {
 
         (x, y)
     }
+
+    pub fn get_neighbourhood(&self, x: u64, y: u64) -> Vec<(u64, u64)> {
+        unimplemented!();
+    }
+
+    pub fn get_value(&self, x: u64, y: u64) -> u64 {
+        unimplemented!();
+    }
+
+    pub fn update_value(&mut self, x: u64, y: u64) {
+        unimplemented!();
+    }
+
+    pub fn get_range(&self) {
+        unimplemented!();
+    }
+
 }

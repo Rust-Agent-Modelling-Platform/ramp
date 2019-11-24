@@ -16,6 +16,7 @@ pub fn connect_sock(sock: &Socket, ip: &str, port: u32) {
 }
 
 pub fn bind_sock(sock: &Socket, ip: String, port: u32) {
+    println!("{}", ip);
     let endpoint = &format!("tcp://{}:{}", ip, port);
     assert!(sock.bind(endpoint).is_ok());
 }
