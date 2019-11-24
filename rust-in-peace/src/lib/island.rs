@@ -1,26 +1,28 @@
 use crate::address_book::SendError;
 use crate::message::Message;
+use std::sync::Arc;
 
 use uuid::Uuid;
 
 use crate::address_book::AddressBook;
+use crate::metrics::MetricHub;
 use std::time::Instant;
 
 pub struct IslandEnv {
     address_book: AddressBook,
-    pub stats_dir_path: String,
+    pub metric_hub: Arc<MetricHub>,
     pub start_time: Instant,
 }
 
 impl IslandEnv {
     pub fn new(
         address_book: AddressBook,
-        stats_dir_path: String,
+        metric_hub: Arc<MetricHub>,
         start_time: Instant,
     ) -> IslandEnv {
         IslandEnv {
             address_book,
-            stats_dir_path,
+            metric_hub,
             start_time,
         }
     }

@@ -1,7 +1,6 @@
 turns = 400
 islands = 3
 islands_sync = true
-stats_path = "stats"
 
 [network]
 is_coordinator = false

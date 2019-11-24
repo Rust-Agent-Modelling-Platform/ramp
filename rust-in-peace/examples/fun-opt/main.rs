@@ -2,6 +2,7 @@
 extern crate serde_derive;
 
 use rust_in_peace::island::{Island, IslandEnv, IslandFactory};
+use rust_in_peace::metrics::MetricHub;
 use rust_in_peace::simulation::Simulation;
 use rust_in_peace::utils;
 use std::sync::Arc;
@@ -15,11 +16,23 @@ mod agent;
 mod functions;
 mod myisland;
 mod settings;
-mod stats;
 
 const EXPECTED_ARGS_NUM: usize = 3;
 
 struct MyIslandFactory;
+
+// MN - metric name
+const PROCREATIONS_MN: &str = "procreations";
+const DEADS_MN: &str = "deads";
+const MEETINGS_MN: &str = "meetings";
+const BEST_FITNESS_MN: &str = "fitness_best";
+const ALL_RECV_MIGR_MN: &str = "migrations_recv_all";
+const ALL_SENT_MIGR_MN: &str = "migrations_sent_all";
+const LOC_RECV_MIGR_MN: &str = "migrations_sent_loc";
+const GLOB_RECV_MIGR_MN: &str = "migrations_sent_glob";
+
+// LN - label name
+const ISLAND_ID_LN: &str = "island_id";
 
 impl IslandFactory for MyIslandFactory {
     fn create(&self, id: Uuid, island_env: IslandEnv) -> Box<dyn Island> {
@@ -39,10 +52,24 @@ impl IslandFactory for MyIslandFactory {
 }
 
 fn main() {
+    let mut metrics = MetricHub::default();
+    register_metrics(&mut metrics);
+
     let factory = MyIslandFactory {};
-    Simulation::start_simulation(Box::new(factory));
+    Simulation::start_simulation(Box::new(factory), metrics);
 }
 
 fn load_settings(file_name: String) -> SimulationSettings {
     SimulationSettings::new(file_name).unwrap()
+}
+
+fn register_metrics(metrics: &mut MetricHub) {
+    metrics.register_int_gauge_vec(PROCREATIONS_MN, "procreations per turn", &[ISLAND_ID_LN]);
+    metrics.register_int_gauge_vec(DEADS_MN, "deads per turn", &[ISLAND_ID_LN]);
+    metrics.register_int_gauge_vec(MEETINGS_MN, "meetings per turn", &[ISLAND_ID_LN]);
+    metrics.register_gauge_vec(BEST_FITNESS_MN, "best fitness in turn", &[ISLAND_ID_LN]);
+    metrics.register_int_gauge_vec(ALL_RECV_MIGR_MN, "all recv migrations", &[ISLAND_ID_LN]);
+    metrics.register_int_gauge_vec(ALL_SENT_MIGR_MN, "all sent migrations", &[ISLAND_ID_LN]);
+    metrics.register_int_gauge_vec(LOC_RECV_MIGR_MN, "local sent migrations", &[ISLAND_ID_LN]);
+    metrics.register_int_gauge_vec(GLOB_RECV_MIGR_MN, "global sent migrations", &[ISLAND_ID_LN]);
 }

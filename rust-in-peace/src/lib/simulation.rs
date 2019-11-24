@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::address_book::AddressBook;
 use crate::island::{IslandEnv, IslandFactory};
 use crate::message::Message;
+use crate::metrics::MetricHub;
 use crate::network::NetworkCtx;
 use crate::settings::ClientSettings;
 use crate::{metrics, utils};
@@ -24,13 +25,11 @@ const EXPECTED_ARGS_NUM: usize = 3;
 pub struct Simulation;
 
 impl Simulation {
-    pub fn start_simulation(factory: Box<dyn IslandFactory>) {
+    pub fn start_simulation(factory: Box<dyn IslandFactory>, metrics: MetricHub) {
         utils::init_logger(LOGGER_LEVEL);
         let args: Vec<String> = utils::parse_input_args(EXPECTED_ARGS_NUM);
         let settings_file_name = args[1].clone();
         let settings = load_settings(settings_file_name.clone());
-        let simulation_dir_path = utils::create_simulation_dir(&settings.stats_path.clone());
-        utils::copy_simulation_settings(&simulation_dir_path, settings_file_name.clone());
 
         log::info!("Initializing simulation");
         let nt_settings = settings.network.clone();
@@ -44,8 +43,8 @@ impl Simulation {
             settings,
             dis_nt_ctx,
             coll_nt_ctx,
-            simulation_dir_path,
             factory,
+            Arc::new(metrics),
         );
     }
 }
@@ -59,8 +58,8 @@ fn start(
     settings: ClientSettings,
     dis_nt_ctx: DispatcherNetworkCtx,
     coll_nt_ctx: CollectorNetworkCtx,
-    simulation_dir_path: String,
     factory: Box<dyn IslandFactory>,
+    metrics: Arc<MetricHub>,
 ) {
     let (island_txes, mut island_rxes) = create_channels(settings.islands);
     let island_ids = create_island_ids(settings.islands);
@@ -79,14 +78,13 @@ fn start(
     for island_no in 0..islands {
         let turns = settings.turns;
         let island_id = island_ids[island_no as usize];
-        let stats_dir_path = utils::create_island_stats_dir(&simulation_dir_path, &island_id);
         let island_sync = islands_sync.clone();
 
         let address_book =
             create_address_book(&island_txes, &island_ids, island_no as i32, &dispatcher_tx);
 
         let island_rx = island_rxes.remove(0);
-        let island_env = IslandEnv::new(address_book, stats_dir_path, Instant::now());
+        let island_env = IslandEnv::new(address_book, Arc::clone(&metrics), Instant::now());
         let island = factory.create(island_id, island_env);
         let dispatcher_tx_cp = mpsc::Sender::clone(&dispatcher_tx);
         let th_handler = if settings.network.global_sync.sync {
@@ -126,6 +124,7 @@ fn run_with_global_sync(
     island_sync: Option<Arc<Barrier>>,
     dispatcher_tx: Sender<DispatcherMessage>,
 ) {
+    island.on_start();
     while let (true, turn, messages) = receive_messages_with_global_sync(&island_rx) {
         island.do_turn(turn, messages);
         island_sync.as_ref().map(|barrier| barrier.wait());
@@ -142,6 +141,7 @@ fn run(
     turns: u32,
     island_sync: Option<Arc<Barrier>>,
 ) {
+    island.on_start();
     for turn in 0..turns {
         let messages = island_rx.try_iter().collect();
         island.do_turn(turn, messages);

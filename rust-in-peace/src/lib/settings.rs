@@ -6,7 +6,6 @@ pub struct ClientSettings {
     pub islands: u32,
     pub network: NetworkSettings,
     pub islands_sync: bool,
-    pub stats_path: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
