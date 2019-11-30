@@ -1,17 +1,17 @@
 [island_settings]
-agents_number = 5
+agents_number = 2
 grass_interval = 10
 
 [sheep_settings]
-init_num = 5
-init_energy = 100
+init_num = 10
+init_energy = 10
 reproduction_chance = 0.01
 energy_gain = 2
 energy_loss = 1
 
 [wolf_settings]
-init_num = 5
-init_energy = 100
+init_num = 2
+init_energy = 10
 reproduction_chance = 0.01
 energy_gain = 20
 energy_loss = 1

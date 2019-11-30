@@ -1,3 +1,4 @@
+use std::sync::mpsc::Sender;
 use crate::message::Message;
 use crate::network;
 use crate::network::{DispatcherNetworkCtx, Ip, Port};
@@ -19,6 +20,7 @@ pub struct Dispatcher {
     rx: Receiver<DispatcherMessage>,
     nt_ctx: DispatcherNetworkCtx,
     islands: u32,
+    sim_tx: Sender<Message>,
 }
 
 impl Dispatcher {
@@ -26,11 +28,13 @@ impl Dispatcher {
         rx: Receiver<DispatcherMessage>,
         nt_ctx: DispatcherNetworkCtx,
         islands: u32,
+        sim_tx: Sender<Message>,
     ) -> Dispatcher {
         Dispatcher {
             rx,
             nt_ctx,
             islands,
+            sim_tx,
         }
     }
 
@@ -39,6 +43,7 @@ impl Dispatcher {
         let mut fin_sim = false;
         let mut confirmations = 0;
         let from = self.nt_ctx.nt_sett.host_ip.clone();
+        self.sim_tx.send(Message::Ok);
         while !fin_sim {
             let incoming = self.rx.try_iter();
             for msg in incoming {

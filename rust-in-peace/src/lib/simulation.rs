@@ -22,6 +22,7 @@ use std::time::Instant;
 use std::collections::HashMap;
 use core::time;
 use zmq::Socket;
+use std::convert::TryInto;
 
 const LOGGER_LEVEL: &str = "info";
 const EXPECTED_ARGS_NUM: usize = 3;
@@ -89,10 +90,22 @@ fn start(
         addresses: island_txes.clone(),
         islands: island_ids.clone(),
     };
-
-    thread::spawn(move || Dispatcher::new(dispatcher_rx, dis_nt_ctx, islands).start());
-    let ten_millis = time::Duration::from_millis(10);
-    thread::sleep(ten_millis);
+    
+    let (sim_tx, sim_rx) = mpsc::channel();
+    thread::spawn(move || Dispatcher::new(dispatcher_rx, dis_nt_ctx, islands, sim_tx).start());
+    let mut wait = true;
+    while wait {
+        let incoming = sim_rx.try_iter();
+        for msg in incoming {
+            match msg {
+                Message::Ok => {
+                    wait = false;
+                    println!("Dispatcher ready");
+                }
+                _ => println!("dispatcher not ready yet")
+            }
+        }
+    }
 
     let mut map_owners: MapOwners = HashMap::new();
     if !is_coordinator {
@@ -252,7 +265,7 @@ fn create_map_owners(
     island_ids: Vec<Uuid>,
     hosts_num: u32,
     ip_table: Vec<(String, network::Port)>,
-    map_size: u64
+    map_size: i64
 ) -> MapOwners {
     let mut owners: MapOwners = HashMap::new();
     let mut ip_islands: HashMap<String, Vec<Uuid>> = HashMap::new();
@@ -270,11 +283,11 @@ fn create_map_owners(
         for (addr, port) in ip_table {
             let islands = ip_islands.get(&addr).unwrap_or(&island_ids);
             for island in islands {
-                let fragment = Fragment { start, end };
+                let fragment = Fragment { start, end: end.try_into().unwrap() };
                 let owner = (addr.clone(), port, island.clone());
 
                 owners.insert(fragment, owner);
-                start = end;
+                start = end.try_into().unwrap();
                 end += map_size * map_size;
             }
         }

@@ -1,5 +1,5 @@
-turns = 400
-islands = 3
+turns = 5
+islands = 1
 islands_sync = true
 
 [network]

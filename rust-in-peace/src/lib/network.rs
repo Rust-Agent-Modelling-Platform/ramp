@@ -130,17 +130,14 @@ impl NetworkCtx {
             self.send_hello_msg(&self.s_req_sock);
             ip_table = self.wait_for_ip_table();
             self.connect(&ip_table);
-
-
-            //self.send_ready_msg(&self.s_req_sock);
         } else if self.settings.is_coordinator {
             let coord_ip = self.settings.coordinator_ip.clone();
             let coord_rep_port = self.settings.coordinator_rep_port;
             bind_sock(&self.rep_sock, coord_ip, coord_rep_port);
-            ip_table = wait_for_hosts(&self.rep_sock, &self.private_key, self.settings.hosts_num);
+            ip_table = wait_for_hosts(&self.rep_sock, &self.private_key, self.settings.hosts_num, false);
             self.connect(&ip_table);
             publish_ip_table(&self.pub_sock, &self.private_key, &ip_table);
-            wait_for_confirmations(&self.rep_sock, &self.private_key, self.settings.hosts_num);
+            wait_for_confirmations(&self.rep_sock, &self.private_key, self.settings.hosts_num, false);
             self.publish_start_sim();
         } else {
             let coord_ip = self.settings.coordinator_ip.clone();
@@ -252,9 +249,13 @@ pub fn publish_ip_table(pub_sock: &Socket, identity: &str, ip_table: &[(Ip, Port
     send_ps(pub_sock, key, from, msg);
 }
 
-pub fn wait_for_hosts(rep_sock: &Socket, identity: &str, hosts: u32) -> Vec<(Ip, Port)> {
+pub fn wait_for_hosts(rep_sock: &Socket, identity: &str, hosts: u32, is_server: bool) -> Vec<(Ip, Port)> {
+    let mut host_count = hosts;
+    if !is_server {
+        host_count -= 1;
+    }
     let mut ip_table = vec![];
-    while ip_table.len() != hosts as usize {
+    while ip_table.len() != host_count as usize {
         let (from, msg) = recv_rr(&rep_sock);
         log::info!("{} {}", msg.as_string(), from);
         match msg {
@@ -271,10 +272,14 @@ pub fn wait_for_hosts(rep_sock: &Socket, identity: &str, hosts: u32) -> Vec<(Ip,
     ip_table
 }
 
-pub fn wait_for_confirmations(rep_sock: &Socket, identity: &str, hosts: u32) {
+pub fn wait_for_confirmations(rep_sock: &Socket, identity: &str, hosts: u32, is_server: bool) {
     log::info!("Waiting for confirmations");
+    let mut host_count = hosts;
+    if !is_server {
+        host_count -= 1;
+    }
     let mut count = 0;
-    while count != hosts {
+    while count != host_count {
         let (from, msg) = recv_rr(rep_sock);
         match msg {
             Message::HostReady => {

@@ -1,5 +1,5 @@
 hosts = 2
-turns = 400
+turns = 5
 ip = "127.0.0.1"
 rep_port = 7001
 pub_port = 7002

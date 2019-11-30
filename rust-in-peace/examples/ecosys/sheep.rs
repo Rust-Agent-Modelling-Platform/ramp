@@ -12,15 +12,15 @@ use crate::ws_utils;
 use crate::ws_utils::SerializedAgent;
 use rust_in_peace::network::Ip;
 
-type Position = (u64, u64);
+type Position = (i64, i64);
 
 pub struct Sheep {
     pub id: Vec<Uuid>,
-    pub energy: HashMap<Uuid, u64>,
+    pub energy: HashMap<Uuid, i64>,
     pub position: HashMap<Uuid, Position>,
     pub reproduction_chance: f64,
-    pub energy_gain: u64,
-    pub energy_loss: u64
+    pub energy_gain: i64,
+    pub energy_loss: i64
 }
 impl Sheep {
     pub fn new(settings: Arc<SheepSettings>) -> Self {
@@ -47,26 +47,25 @@ impl Sheep {
         unimplemented!();
     }
 
-    pub fn serialize(&self, agent_type: AgentType, id: Uuid) -> Vec<u8> {
-        let agent = SerializedAgent {
-            agent_type,
-            id,
-            energy: *self.energy.get(&id).unwrap(),
-            position: *self.position.get(&id).unwrap()
-        };
-        bincode::serialize(&agent).unwrap()
-    }
-
-    pub fn add_new_sheep(&mut self, id: Uuid, energy: u64, position: Position) {
+    pub fn add_new_sheep(&mut self, id: Uuid, energy: i64, position: Position) {
         self.id.push(id);
         self.energy.insert(id, energy);
         self.position.insert(id, position);
     }
 
-    pub fn set_initial_sheep_positions(&mut self, range: Range<u64>) {
+    pub fn set_initial_sheep_positions(&mut self, range: Range<u64>, chunk_len: i64) {
         for id in self.id.iter() {
-            let (x, y) = ws_utils::generate_random_position(&range);
+            let (x, y) = ws_utils::generate_random_position(&range, chunk_len);
             self.position.insert(*id, (x,y));
         }
     }
+
+    pub fn print_sheep(&self, id: &Uuid) {
+        println!("<--------------- Sheep {} -------------------->", &id.to_string()[..8]);
+        println!("Energy: {:?}", self.energy.get(id).unwrap());
+        println!("Position: {:?}", self.position.get(id).unwrap());
+        println!("<---------------------------------------------------->");
+
+    }
+
 }

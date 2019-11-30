@@ -9,8 +9,8 @@ pub type TurnNumber = u32;
 pub enum Message {
     Islands(Vec<Uuid>),
     Owners(MapOwners),
-    MapSet(u64, u64, i32),
-    MapGet(u64, u64, i32),
+    MapSet(i64, i64, i32),
+    MapGet(i64, i64, i32),
     Agent(Vec<u8>),
     Hello(Ip, Port),
     IpTable(Vec<(Ip, Port)>),

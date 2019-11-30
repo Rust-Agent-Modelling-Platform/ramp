@@ -25,9 +25,9 @@ fn main() {
     thread::spawn(move || metrics::start_server(metrics_addr));
 
     let from = settings.ip.clone();
-    let ip_table = network::wait_for_hosts(&rep_sock, &from, settings.hosts);
+    let ip_table = network::wait_for_hosts(&rep_sock, &from, settings.hosts, true);
     network::publish_ip_table(&pub_sock, &from, &ip_table);
-    network::wait_for_confirmations(&rep_sock, &from, settings.hosts);
+    network::wait_for_confirmations(&rep_sock, &from, settings.hosts, true);
 
     run(rep_sock, pub_sock, from, settings.hosts, settings.turns);
 }

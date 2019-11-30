@@ -32,7 +32,7 @@ pub struct GlobalSyncSettings {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct MapSettings {
-    pub chunk_len: u64,
+    pub chunk_len: i64,
 }
 
 impl ClientSettings {
