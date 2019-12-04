@@ -4,13 +4,7 @@ use std::collections::HashMap;
 use crate::settings::SheepSettings;
 use std::sync::Arc;
 use std::ops::Range;
-use std::borrow::BorrowMut;
-use rust_in_peace::map::MapInstance;
-use rand::Rng;
-use crate::agent_types::AgentType;
 use crate::ws_utils;
-use crate::ws_utils::SerializedAgent;
-use rust_in_peace::network::Ip;
 
 type Position = (i64, i64);
 
@@ -28,7 +22,7 @@ impl Sheep {
         let mut energy = HashMap::new();
         let position = HashMap::new();
 
-        for i in 0..settings.init_num {
+        for _i in 0..settings.init_num {
             let new_sheep = Uuid::new_v4();
             id.push(new_sheep);
             energy.insert(new_sheep, settings.init_energy);
@@ -43,9 +37,6 @@ impl Sheep {
         }
     }
 
-    fn is_reproducing(&self, id: Uuid) {
-        unimplemented!();
-    }
 
     pub fn add_new_sheep(&mut self, id: Uuid, energy: i64, position: Position) {
         self.id.push(id);

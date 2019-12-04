@@ -11,7 +11,6 @@ pub const BROADCAST_KEY: &str = "BROADCAST";
 
 pub fn connect_sock(sock: &Socket, ip: &str, port: u32) {
     let address = &format!("tcp://{}:{}", ip.to_string(), port);
-    println!("CONNECTION TO {}", &address);
     assert!(sock.connect(address).is_ok());
 }
 

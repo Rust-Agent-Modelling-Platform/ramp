@@ -2,19 +2,20 @@
 use uuid::Uuid;
 use rust_in_peace::message::Message;
 use rust_in_peace::island::{Island, IslandEnv};
-use rust_in_peace::map::{MapInstance, Fragment, FragmentOwner, MapOwners, Map};
-use std::collections::HashMap;
+use rust_in_peace::map::{MapInstance, FragmentOwner};
 use std::sync::Arc;
-use std::cell::RefCell;
 use crate::settings::{SheepSettings, WolfSettings, IslandSettings};
 use crate::sheep::Sheep;
 use crate::wolves::Wolves;
 use crate::{ws_utils};
 use crate::agent_types::AgentType;
-use std::borrow::Borrow;
 use std::ops::Range;
 use rand::Rng;
-use std::convert::TryInto;
+
+pub struct Stats {
+    number_of_wolves: u64,
+    number_of_sheep: u64
+}
 
 pub struct WSIsland {
     pub id: Uuid,
@@ -56,12 +57,10 @@ impl Island for WSIsland {
         log::warn!("{:#?}", map);
         self.map = Some(map);
 
-        //Set the initial amount of wolves and sheep at random parts of the map
         let range = self.map.as_ref().unwrap().get_my_range();
         self.sheep.set_initial_sheep_positions(range.clone(), self.map.as_ref().unwrap().map.chunk_len.clone());
         self.wolves.set_initial_wolf_positions(range.clone(), self.map.as_ref().unwrap().map.chunk_len.clone());
 
-        //Initially whole map has grass (0 means grass)
         self.map.as_mut().unwrap().init_with_val(0);
     }
 
@@ -139,9 +138,11 @@ impl WSIsland {
 
     fn do_sheep_turn(&mut self) {
         log::info!("Beginning sheep turn in {}", &self.id.to_string()[..8]);
-        if self.wolves.id.is_empty() {
-            log::warn!("There are no more sheep");
+        if self.sheep.id.is_empty() {
+            log::warn!("There are no more sheep on island {}", &self.id.to_string()[..8]);
+            return;
         }
+        let range = self.map.as_ref().unwrap().get_my_range();
         for sheep in &self.sheep.id {
             self.sheep.print_sheep(sheep);
 
@@ -161,12 +162,8 @@ impl WSIsland {
             let new_pos = self.get_new_position(curr_pos, move_vector);
             log::info!("The new position for this sheep is to be {:?}", new_pos);
 
-            let range = self.map.as_ref().unwrap().get_my_range();
-            let owners = self.map.as_ref().unwrap().map.owners.clone();
             //log::info!("Verifying range {:?} for pos {:?}", &range, &new_pos);
-
-            let move_action =
-                self.determine_move_action(&new_pos, &range, &self.map.as_ref().unwrap());
+            let move_action = self.determine_move_action(&new_pos, &range, &self.map.as_ref().unwrap());
 
             *self.sheep.position.get_mut(&sheep).unwrap() = new_pos;
             *self.sheep.energy.get_mut(sheep).unwrap() -= self.sheep_settings.energy_loss;
@@ -200,8 +197,10 @@ impl WSIsland {
     fn do_wolf_turn(&mut self) {
         log::info!("Beginning wolf turn in {}", &self.id.to_string()[..8]);
         if self.wolves.id.is_empty() {
-            log::warn!("There are no more wolves");
+            log::warn!("There are no more wolves on island {}", &self.id.to_string()[..8]);
+            return;
         }
+        let range = self.map.as_ref().unwrap().get_my_range();
         for wolf in &self.wolves.id {
             let prey = self.check_for_sheep_at_position(*self.wolves.position.get(wolf).unwrap());
             if prey != None {
@@ -220,15 +219,11 @@ impl WSIsland {
             let new_pos = self.get_new_position(curr_pos, move_vector);
             log::info!("The new position for this wolf is to be {:?}", new_pos);
 
-            let range = self.map.as_ref().unwrap().get_my_range();
-            let owners = self.map.as_ref().unwrap().map.owners.clone();
-            log::info!("Verifying range {:?} for pos {:?}", &range, &new_pos);
+            //log::info!("Verifying range {:?} for pos {:?}", &range, &new_pos);
 
             let move_action =
                 self.determine_move_action(&new_pos, &range, &self.map.as_ref().unwrap());
 
-
-            // Remove wolf if dead
             *self.wolves.position.get_mut(&wolf).unwrap() = new_pos;
             *self.wolves.energy.get_mut(wolf).unwrap() -= self.wolf_settings.energy_loss;
             if *self.wolves.energy.get(&wolf).unwrap() <= 0 {
@@ -273,8 +268,8 @@ impl WSIsland {
     }
 
     fn send_local_migrants(&mut self) {
-        for (agent_type, id, (ip, _port, island_id)) in self.outgoing_local.iter() {
-            let mut serialized = vec![];
+        for (agent_type, id, (_, _, island_id)) in self.outgoing_local.iter() {
+            let serialized;
             match agent_type {
                 AgentType::Sheep => {
                     log::warn!("Sending sheep {} with position {:?} to local island", &id.to_string()[..8], *self.sheep.position.get(&id).unwrap());
@@ -297,7 +292,7 @@ impl WSIsland {
 
     fn send_global_migrants(&mut self) {
         for (agent_type, id, (ip, port, _island_id)) in self.outgoing_global.iter() {
-            let mut serialized = vec![];
+            let serialized;
             match agent_type {
                 AgentType::Sheep => {
                     log::warn!("Sending sheep {} with position {:?} to another host", &id.to_string()[..8], *self.sheep.position.get(&id).unwrap());
@@ -328,21 +323,18 @@ impl WSIsland {
     }
 
     fn remove_dead_agents(&mut self) {
-        log::warn!("Dead sheep: {:?}", &self.remove_sheep);
-        //self.sheep.id.retain(|s| !self.remove_sheep.contains(s));
         for dead_agent in self.remove_sheep.iter() {
             self.sheep.id.retain(|s| s != dead_agent);
             self.sheep.position.remove(dead_agent);
             self.sheep.energy.remove(dead_agent);
         }
-        log::warn!("Sheep after removal: {:?}", &self.sheep.id);
-        log::warn!("Dead wolves: {:?}", &self.remove_wolves);
+        //log::warn!("Sheep after removal: {:?}", &self.sheep.id);
         for dead_agent in self.remove_wolves.iter() {
             self.wolves.id.retain(|s| s != dead_agent);
             self.wolves.position.remove(dead_agent);
             self.wolves.energy.remove(dead_agent);
         }
-        log::warn!("Wolves after removal: {:?}", &self.wolves.id);
+        //log::warn!("Wolves after removal: {:?}", &self.wolves.id);
     }
 
     fn clear_queues(&mut self) {
@@ -427,8 +419,9 @@ impl WSIsland {
     }
 
     fn display_final_stats(&self) {
-        println!("AT THE END OF THE SIMULATION:");
+        println!("========================== AT THE END OF THE SIMULATION ON ISLAND {}: ========================== ", &self.id.to_string()[..8]);
         println!("Number of sheep: {}", self.sheep.id.len());
         println!("Number of wolves: {}", self.wolves.id.len());
+        println!("=====================================================================================================");
     }
 }

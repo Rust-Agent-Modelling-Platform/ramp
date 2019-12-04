@@ -3,12 +3,8 @@ use uuid::Uuid;
 use std::collections::HashMap;
 use crate::settings::WolfSettings;
 use std::sync::Arc;
-use rust_in_peace::map::MapInstance;
-use rand::Rng;
 use std::ops::Range;
-use crate::{utils, ws_utils};
-use crate::agent_types::AgentType;
-use crate::ws_utils::SerializedAgent;
+use crate::ws_utils;
 
 type Position = (i64, i64);
 
@@ -26,7 +22,7 @@ impl Wolves {
         let mut energy = HashMap::new();
         let position = HashMap::new();
 
-        for i in 0..settings.init_num {
+        for _i in 0..settings.init_num {
             let new_sheep = Uuid::new_v4();
             id.push(new_sheep);
             energy.insert(new_sheep, settings.init_energy);
