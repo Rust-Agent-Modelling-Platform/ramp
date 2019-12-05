@@ -1,0 +1,12 @@
+global:
+  scrape_interval:     1s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: 'rip'
+    static_configs:
+      - targets: ["127.0.0.1:9898", "127.0.0.2:9898", "127.0.0.3:9898", "127.0.0.4:9898"]
+  - job_name: 'node-exporter'
+    static_configs:
+      # here should be provided ip addresses all hosts which are running node_exporter 
+      - targets: ["127.0.0.1:9100"]

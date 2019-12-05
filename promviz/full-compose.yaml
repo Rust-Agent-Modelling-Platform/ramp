@@ -1,0 +1,35 @@
+version: "3"
+services:
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus
+    network_mode: "host"
+    ports:
+      - 9090
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  promviz:
+    container_name: promviz
+    image: nghialv2607/promviz:v0.1.0
+    network_mode: "host"
+    ports:
+      - 9091
+    volumes:
+      - ./full.yaml:/etc/promviz/promviz.yaml
+  promviz-front:
+    container_name: promviz-front
+    image: mjhddevlion/promviz-front:v0.1.0
+    network_mode: "host"
+    ports:
+      - 8080
+    environment:
+      - UPDATE_URL=http://localhost:9091/graph
+      - INTERVAL=10000
+      - MAX_REPLAY_OFFSET=43200
+  grafana:
+    container_name: grafana
+    image: grafana/grafana
+    network_mode: "host"
+    ports:
+      - 3000
+      

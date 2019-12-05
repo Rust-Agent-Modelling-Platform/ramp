@@ -1,33 +1,18 @@
 use config::{Config, ConfigError, File};
 
-#[derive(Debug, Deserialize)]
-pub struct Settings {
-    pub turns: u32,
-    pub islands: u32,
-    pub network: Network,
-    pub island: Island,
-    pub islands_sync: bool,
-    pub agent_config: AgentConfig,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Network {
-    pub is_coordinator: bool,
-    pub hosts_num: u32,
-    pub coordinator_ip: String,
-    pub coordinator_rep_port: u32,
-    pub host_ip: String,
-    pub pub_port: u32,
-    pub ips: Vec<String>,
+#[derive(Debug, Deserialize, Copy, Clone)]
+pub struct SimulationSettings {
+    pub island_settings: IslandSettings,
+    pub agent_settings: AgentSettings,
 }
 
 #[derive(Debug, Deserialize, Copy, Clone)]
-pub struct Island {
+pub struct IslandSettings {
     pub agents_number: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone)]
-pub struct AgentConfig {
+pub struct AgentSettings {
     pub genotype_dim: i32,
     pub initial_energy: i32,
     pub minimum: bool,
@@ -39,7 +24,7 @@ pub struct AgentConfig {
     pub upper_bound: f64,
 }
 
-impl Settings {
+impl SimulationSettings {
     pub fn new(file_name: String) -> Result<Self, ConfigError> {
         let mut settings = Config::new();
 

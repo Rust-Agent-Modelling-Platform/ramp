@@ -1,0 +1,16 @@
+graphName: SimpleDemo
+
+globalLevel:
+  maxVolume: 1200
+  clusterConnections:
+    - name: cluster
+      query: messages_recv_total
+      prometheusURL: http://localhost:9090
+      source:
+        label: source
+      target:
+        label: target
+      status:
+        label: status
+        warningRegex: ^4..$
+        dangerRegex: ^5..$

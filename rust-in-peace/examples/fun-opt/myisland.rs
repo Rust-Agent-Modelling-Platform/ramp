@@ -1,20 +1,22 @@
+use crate::{
+    ALL_RECV_MIGR_MN, ALL_SENT_MIGR_MN, BEST_FITNESS_MN, DEADS_MN, GLOB_RECV_MIGR_MN,
+    LOC_RECV_MIGR_MN, MEETINGS_MN, PROCREATIONS_MN,
+};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::process;
-use std::sync::{Arc, Barrier};
-use std::time::Instant;
+use std::sync::Arc;
 
 use colored::*;
 use rand::{thread_rng, Rng};
 use uuid::Uuid;
 
 use crate::action::Action;
-use crate::address_book::AddressBook;
 use crate::agent::Agent;
-use crate::message::Message;
-use crate::settings::AgentConfig;
-use crate::stats;
+use crate::settings::AgentSettings;
+use rust_in_peace::island::{Island, IslandEnv};
+use rust_in_peace::message::Message;
 
 const LOCAL_MIGRATION_THRESHOLD: u32 = 50;
 
@@ -36,97 +38,81 @@ impl IdQueues {
     }
 }
 
-pub struct Stats {
-    pub best_fitness_in_turn: Vec<f64>,
-    pub meetings_in_turn: Vec<u32>,
-    pub procreations_in_turn: Vec<u32>,
-    pub all_received_migrations_in_turn: Vec<u32>,
-    pub all_sent_migrations_in_turn: Vec<u32>,
-    pub local_sent_migrations_in_turn: Vec<u32>,
-    pub global_sent_migrations_in_turn: Vec<u32>,
-    pub deads_in_turn: Vec<u32>,
+pub struct MyIsland {
+    pub id: Uuid,
+    pub id_agent_map: HashMap<Uuid, RefCell<Agent>>,
+    pub action_queue: Vec<Action>,
+    pub agent_settings: Arc<AgentSettings>,
+    island_env: IslandEnv,
+    id_queues: IdQueues,
 }
+impl Island for MyIsland {
+    fn on_start(&mut self) {}
 
-impl Stats {
-    fn new() -> Self {
-        Stats {
-            best_fitness_in_turn: vec![],
-            meetings_in_turn: vec![],
-            procreations_in_turn: vec![],
-            all_received_migrations_in_turn: vec![],
-            all_sent_migrations_in_turn: vec![],
-            local_sent_migrations_in_turn: vec![],
-            global_sent_migrations_in_turn: vec![],
-            deads_in_turn: vec![],
-        }
+    fn do_turn(&mut self, turn_number: u32, messages: Vec<Message>) {
+        self.log_turn_start(turn_number);
+
+        self.resolve_messages(messages);
+        self.clear_action_queues();
+        self.create_action_queues();
+        self.resolve_migrations();
+        self.resolve_procreations();
+        self.resolve_meetings();
+        self.resolve_deads();
+
+        self.log_turn_end_and_update_best_agent();
+    }
+
+    fn on_finish(&mut self) {
+        let duration = self.island_env.start_time.elapsed().as_secs();
+
+        log::info!("{}", "================= END =================".green());
+        log::info!("Time elapsed: {} seconds", duration);
+        log::info!(
+            "At end of simulation the best fitness is: {}",
+            self.get_best_fitness().unwrap()
+        );
     }
 }
 
-pub struct Island {
-    pub id: Uuid,
-    pub id_agent_map: HashMap<Uuid, RefCell<Agent>>,
-    pub turn_number: u64,
-    pub action_queue: Vec<Action>,
-    pub agent_config: Arc<AgentConfig>,
-    pub stats: Stats,
-    turns: u32,
-    island_stats_dir_path: String,
-    address_book: AddressBook,
-    id_queues: IdQueues,
-    islands_sync: Option<Arc<Barrier>>,
-}
-
-impl Island {
+impl MyIsland {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: Uuid,
-        address_book: AddressBook,
+        island_env: IslandEnv,
         calculate_fitness: &dyn Fn(&[f64]) -> f64,
         agents_number: u32,
-        turns: u32,
-        agent_config: Arc<AgentConfig>,
-        island_stats_dir_path: String,
-        islands_sync: Option<Arc<Barrier>>,
+        agent_settings: Arc<AgentSettings>,
     ) -> Self {
-        Island {
+        MyIsland {
             id,
-            id_agent_map: Island::create_id_agent_map(
+            id_agent_map: MyIsland::create_id_agent_map(
                 agents_number,
-                &agent_config,
+                &agent_settings,
                 calculate_fitness,
             ),
-            turn_number: 0,
             action_queue: Vec::new(),
-            turns,
-            agent_config,
-            island_stats_dir_path,
-            address_book,
+            agent_settings,
+            island_env,
             id_queues: IdQueues::new(),
-            stats: Stats::new(),
-            islands_sync,
         }
     }
 
-    pub fn run(&mut self) {
-        let start_time = Instant::now();
-        for turn_number in 1..=self.turns {
-            self.log_turn_start(turn_number);
+    pub fn short_id(&self) -> String {
+        String::from(&self.id.to_string()[..5])
+    }
 
-            self.receive_messages();
-            self.clear_action_queues();
-            self.create_action_queues();
-            self.resolve_migrations();
-            self.resolve_procreations();
-            self.resolve_meetings();
-            self.resolve_deads();
-
-            self.log_turn_end_and_update_best_agent();
-
-            if let Some(islands_sync) = &self.islands_sync {
-                islands_sync.wait();
-            };
+    pub fn get_best_fitness(&self) -> Option<f64> {
+        let mut top_guy = match self.id_agent_map.values().take(1).last() {
+            Some(a) => a,
+            None => return None,
+        };
+        for agent in self.id_agent_map.values() {
+            if agent.borrow().fitness > top_guy.borrow().fitness {
+                top_guy = agent;
+            }
         }
-        self.finish(start_time);
+        Some(top_guy.borrow().fitness)
     }
 
     fn log_turn_start(&self, turn_number: u32) {
@@ -142,9 +128,13 @@ impl Island {
 
     // TODO: handle no agents properly
     fn log_turn_end_and_update_best_agent(&mut self) {
-        match stats::get_best_fitness(&self) {
+        match self.get_best_fitness() {
             Some(fitness) => {
-                self.stats.best_fitness_in_turn.push(fitness);
+                self.island_env.metric_hub.set_gauge_vec(
+                    BEST_FITNESS_MN,
+                    &[&self.short_id()],
+                    fitness,
+                );
                 log::debug!("Best agent this turn: {}", fitness.to_string().blue());
             }
             None => {
@@ -198,8 +188,8 @@ impl Island {
             let (id1, _) = self.id_queues.procreating_ids.pop().unwrap();
             let (id2, _) = self.id_queues.procreating_ids.pop().unwrap();
 
-            let mut agent1 = self.id_agent_map.get(&id1).unwrap().borrow_mut();
-            let mut agent2 = self.id_agent_map.get(&id2).unwrap().borrow_mut();
+            let mut agent1 = self.id_agent_map[&id1].borrow_mut();
+            let mut agent2 = self.id_agent_map[&id2].borrow_mut();
 
             let (uuid, new_agent) = agent1.procreate(&mut agent2);
             drop(agent1);
@@ -208,7 +198,12 @@ impl Island {
             self.id_agent_map.insert(uuid, new_agent);
             procreating_num += 1;
         }
-        self.stats.procreations_in_turn.push(procreating_num);
+
+        self.island_env.metric_hub.add_int_gauge_vec(
+            PROCREATIONS_MN,
+            &[&self.short_id()],
+            procreating_num,
+        );
     }
 
     pub fn resolve_meetings(&mut self) {
@@ -229,13 +224,16 @@ impl Island {
             let (id1, _) = self.id_queues.meeting_ids.pop().unwrap();
             let (id2, _) = self.id_queues.meeting_ids.pop().unwrap();
 
-            let mut agent1 = self.id_agent_map.get(&id1).unwrap().borrow_mut();
-            let mut agent2 = self.id_agent_map.get(&id2).unwrap().borrow_mut();
+            let mut agent1 = self.id_agent_map[&id1].borrow_mut();
+            let mut agent2 = self.id_agent_map[&id2].borrow_mut();
 
             agent1.meet(&mut agent2);
             meeting_num += 1;
         }
-        self.stats.meetings_in_turn.push(meeting_num);
+        let id = &self.id.to_string()[..5];
+        self.island_env
+            .metric_hub
+            .add_int_gauge_vec(MEETINGS_MN, &[id], meeting_num);
     }
 
     pub fn resolve_migrations(&mut self) {
@@ -243,49 +241,48 @@ impl Island {
             "Number of migrating agents this turn: {}",
             self.id_queues.migrating_ids.len()
         );
-        if self.address_book.addresses.is_empty() {
-            self.id_queues.migrating_ids.clear();
-            return;
-        }
         let mut local_migrations_num = 0;
         let mut global_migrations_num = 0;
         for id in &self.id_queues.migrating_ids {
             let prob = thread_rng().gen_range(0, 100);
             match self.id_agent_map.remove(id) {
                 Some(agent) => {
+                    let s_agent = bincode::serialize(&agent.into_inner()).unwrap();
                     if prob <= LOCAL_MIGRATION_THRESHOLD {
-                        match self
-                            .address_book
-                            .send_to_rnd(Message::Agent(agent.into_inner()))
-                        {
+                        match self.island_env.send_to_rnd_local(Message::Agent(s_agent)) {
                             Ok(()) => local_migrations_num += 1,
                             Err(e) => match e.0 {
-                                Message::Agent(agent) => {
-                                    self.id_agent_map.insert(*id, RefCell::new(agent));
+                                Message::Agent(s_agent) => {
+                                    let d_agent: Agent = bincode::deserialize(&s_agent).unwrap();
+                                    self.id_agent_map.insert(*id, RefCell::new(d_agent));
                                 }
                                 _ => log::info!("Bad return message"),
                             },
                         }
                     } else {
-                        self.address_book
-                            .pub_rx
-                            .send(Message::Agent(agent.into_inner()))
-                            .unwrap();
+                        self.island_env.send_to_rnd_global(Message::Agent(s_agent));
                         global_migrations_num += 1;
                     }
                 }
                 None => log::info!("No agent with id {}", id),
             }
         }
-        self.stats
-            .all_sent_migrations_in_turn
-            .push(local_migrations_num + global_migrations_num);
-        self.stats
-            .local_sent_migrations_in_turn
-            .push(local_migrations_num);
-        self.stats
-            .global_sent_migrations_in_turn
-            .push(global_migrations_num);
+
+        self.island_env.metric_hub.add_int_gauge_vec(
+            ALL_SENT_MIGR_MN,
+            &[&self.short_id()],
+            local_migrations_num + global_migrations_num,
+        );
+        self.island_env.metric_hub.add_int_gauge_vec(
+            LOC_RECV_MIGR_MN,
+            &[&self.short_id()],
+            local_migrations_num,
+        );
+        self.island_env.metric_hub.add_int_gauge_vec(
+            GLOB_RECV_MIGR_MN,
+            &[&self.short_id()],
+            global_migrations_num,
+        );
         self.id_queues.migrating_ids.clear();
     }
 
@@ -298,41 +295,32 @@ impl Island {
         for id in &self.id_queues.dead_ids {
             self.id_agent_map.remove(id);
         }
-        self.stats.deads_in_turn.push(deads_in_turn as u32);
+        self.island_env.metric_hub.add_int_gauge_vec(
+            DEADS_MN,
+            &[&self.short_id()],
+            deads_in_turn as i64,
+        );
         self.id_queues.dead_ids.clear();
     }
 
-    fn finish(&self, start_time: Instant) {
-        let duration = start_time.elapsed().as_secs();
-        stats::generate_stat_files(&self, duration, &self.island_stats_dir_path);
-
-        log::info!("{}", "================= END =================".green());
-        log::info!("Time elapsed: {} seconds", start_time.elapsed().as_secs());
-        log::info!(
-            "At end of simulation the best agent is: {}",
-            stats::get_most_fit_agent(&self)
-                .borrow()
-                .fitness
-                .to_string()
-                .blue()
-        );
-    }
-
-    fn receive_messages(&mut self) {
-        let messages = self.address_book.self_rx.try_iter();
+    fn resolve_messages(&mut self, messages: Vec<Message>) {
         let mut migrants_num = 0;
         for message in messages {
             match message {
                 Message::Agent(migrant) => {
                     migrants_num += 1;
-                    self.id_agent_map.insert(migrant.id, RefCell::new(migrant));
+                    let d_migrant: Agent = bincode::deserialize(&migrant).unwrap();
+                    self.id_agent_map
+                        .insert(d_migrant.id, RefCell::new(d_migrant));
                 }
                 _ => log::error!("Unexpected msg"),
             }
         }
-        self.stats
-            .all_received_migrations_in_turn
-            .push(migrants_num);
+        self.island_env.metric_hub.add_int_gauge_vec(
+            ALL_RECV_MIGR_MN,
+            &[&self.short_id()],
+            migrants_num,
+        );
     }
 
     fn clear_action_queues(&mut self) {
@@ -341,7 +329,7 @@ impl Island {
 
     fn create_id_agent_map(
         agents_number: u32,
-        agent_config: &Arc<AgentConfig>,
+        agent_config: &Arc<AgentSettings>,
         calculate_fitness: &dyn Fn(&[f64]) -> f64,
     ) -> HashMap<Uuid, RefCell<Agent>> {
         let mut id_agent_map: HashMap<Uuid, RefCell<Agent>> = HashMap::new();
@@ -365,8 +353,8 @@ impl Island {
     }
 }
 
-// =============================================== Trait implementations ===========================================================
-impl fmt::Display for Island {
+// ========================== Trait implementations ==========================
+impl fmt::Display for MyIsland {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,

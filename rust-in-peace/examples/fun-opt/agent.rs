@@ -6,13 +6,13 @@ use uuid::Uuid;
 
 use crate::action::Action;
 use crate::functions;
-use crate::settings::AgentConfig;
+use crate::settings::AgentSettings;
 use std::cell::RefCell;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Agent {
     pub id: Uuid,
-    pub config: Arc<AgentConfig>,
+    pub settings: Arc<AgentSettings>,
     pub energy: i32,
     pub genotype: Vec<f64>,
     pub fitness: f64,
@@ -21,7 +21,7 @@ pub struct Agent {
 impl Agent {
     pub fn new(
         id: Uuid,
-        config: Arc<AgentConfig>,
+        config: Arc<AgentSettings>,
         genotype: Vec<f64>,
         calculate_fitness: &dyn Fn(&[f64]) -> f64,
         energy: i32,
@@ -33,7 +33,7 @@ impl Agent {
         };
         RefCell::new(Agent {
             id,
-            config,
+            settings: config,
             energy,
             fitness: function,
             genotype,
@@ -41,7 +41,7 @@ impl Agent {
     }
 
     pub fn procreate(&mut self, partner: &mut Agent) -> (Uuid, RefCell<Agent>) {
-        let penalty = self.config.procreation_penalty;
+        let penalty = self.settings.procreation_penalty;
 
         self.energy = (f64::from(self.energy) * (1.0 - penalty)) as i32;
         partner.energy = (f64::from(partner.energy) * (1.0 - penalty)) as i32;
@@ -49,12 +49,12 @@ impl Agent {
         let child_energy = self.energy + partner.energy;
 
         let mut new_genotype = Agent::crossover(&self.genotype, &partner.genotype);
-        Agent::mutate_genotype(&self.config, &mut new_genotype);
+        Agent::mutate_genotype(&self.settings, &mut new_genotype);
 
         let uuid = Uuid::new_v4();
         let new_agent = Agent::new(
             uuid,
-            self.config.clone(),
+            self.settings.clone(),
             new_genotype,
             &functions::rastrigin,
             child_energy,
@@ -63,7 +63,7 @@ impl Agent {
     }
 
     pub fn meet(&mut self, partner: &mut Agent) {
-        let penalty = &self.config.meeting_penalty;
+        let penalty = &self.settings.meeting_penalty;
 
         if self.fitness > partner.fitness {
             self.energy += *penalty;
@@ -74,7 +74,7 @@ impl Agent {
         }
     }
 
-    pub fn mutate_genotype(config: &AgentConfig, genotype: &mut Vec<f64>) {
+    pub fn mutate_genotype(config: &AgentSettings, genotype: &mut Vec<f64>) {
         let left_bound = config.lower_bound / 10.0;
         let right_bound = config.upper_bound / 10.0;
 
@@ -103,20 +103,23 @@ impl Agent {
             Action::Migration(self.id)
         } else if self.energy > 0 && self.energy < 90 {
             Action::Meeting(self.id, Uuid::nil())
-        } else if prob > self.config.procreation_prob {
+        } else if prob > self.settings.procreation_prob {
             Action::Procreation(self.id, Uuid::nil())
         } else {
             Action::Meeting(self.id, Uuid::nil())
         }
     }
+
+    pub fn as_string(&self) -> String {
+        format!(
+            "Agent {{\n id: {},\n energy: {},\n genotype: {:#?},\n fitness: {}\n}}",
+            self.id, self.energy, self.genotype, self.fitness
+        )
+    }
 }
 
 impl fmt::Display for Agent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Agent {{\n id: {},\n energy: {},\n genotype: {:#?},\n fitness: {}\n}}",
-            self.id, self.energy, self.genotype, self.fitness
-        )
+        write!(f, "{}", self.as_string())
     }
 }
