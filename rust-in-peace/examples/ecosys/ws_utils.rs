@@ -1,8 +1,7 @@
-
-use uuid::Uuid;
-use std::ops::Range;
-use rand::Rng;
 use crate::agent_types::AgentType;
+use rand::Rng;
+use std::ops::Range;
+use uuid::Uuid;
 
 type Position = (i64, i64);
 
@@ -19,7 +18,7 @@ pub fn serialize(agent_type: AgentType, id: Uuid, energy: i64, position: Positio
         agent_type,
         id,
         energy,
-        position
+        position,
     };
     bincode::serialize(&agent).unwrap()
 }

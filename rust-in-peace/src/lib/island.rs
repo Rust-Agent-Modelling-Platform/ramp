@@ -5,12 +5,15 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::address_book::AddressBook;
+use crate::dispatcher::Addr;
+use crate::map::{FragmentOwner, Map};
 use crate::metrics::MetricHub;
 use std::time::Instant;
-use crate::dispatcher::Addr;
 
 pub struct IslandEnv {
     address_book: AddressBook,
+    pub fragment_owner: FragmentOwner,
+    pub map: Map,
     pub metric_hub: Arc<MetricHub>,
     pub start_time: Instant,
 }
@@ -18,11 +21,15 @@ pub struct IslandEnv {
 impl IslandEnv {
     pub fn new(
         address_book: AddressBook,
+        map: Map,
+        fragment_owner: FragmentOwner,
         metric_hub: Arc<MetricHub>,
         start_time: Instant,
     ) -> IslandEnv {
         IslandEnv {
             address_book,
+            map,
+            fragment_owner,
             metric_hub,
             start_time,
         }
@@ -34,6 +41,14 @@ impl IslandEnv {
 
     pub fn send_to_all_local(&mut self, msg: Message) -> Result<(), SendError<Message>> {
         self.address_book.send_to_all_local(msg)
+    }
+
+    pub fn send_to_local(
+        &mut self,
+        island_id: Uuid,
+        msg: Message,
+    ) -> Result<(), SendError<Message>> {
+        self.address_book.send_to_local(island_id, msg)
     }
 
     pub fn send_to_rnd_global(&mut self, msg: Message) {

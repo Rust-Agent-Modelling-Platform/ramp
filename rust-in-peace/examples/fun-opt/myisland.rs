@@ -13,7 +13,6 @@ use rand::{thread_rng, Rng};
 use uuid::Uuid;
 
 use crate::action::Action;
-use rust_in_peace::map::Map;
 use crate::agent::Agent;
 use crate::settings::AgentSettings;
 use rust_in_peace::island::{Island, IslandEnv};

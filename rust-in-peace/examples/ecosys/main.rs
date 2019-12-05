@@ -7,15 +7,16 @@ use rust_in_peace::utils;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::ws_island::WSIsland;
 use crate::settings::SimulationSettings;
+use crate::ws_island::WSIsland;
+use rust_in_peace::metrics::MetricHub;
 
+mod agent_types;
+mod settings;
 mod sheep;
 mod wolves;
 mod ws_island;
-mod settings;
 mod ws_utils;
-mod agent_types;
 
 struct WSIslandFactory;
 const EXPECTED_ARGS_NUM: usize = 3;
@@ -31,17 +32,32 @@ impl IslandFactory for WSIslandFactory {
             island_env,
             Arc::new(settings.island_settings),
             Arc::new(settings.sheep_settings),
-            Arc::new(settings.wolf_settings) );
+            Arc::new(settings.wolf_settings),
+        );
 
         Box::new(island)
     }
 }
 
 fn main() {
+    let mut metrics = MetricHub::default();
+    register_metrics(&mut metrics);
+
     let factory = WSIslandFactory {};
-    Simulation::start_simulation(Box::new(factory));
+    Simulation::start_simulation(Box::new(factory), metrics);
 }
 
 fn load_settings(file_name: String) -> SimulationSettings {
     SimulationSettings::new(file_name).unwrap()
+}
+
+fn register_metrics(metrics: &mut MetricHub) {
+    //    metrics.register_int_gauge_vec(PROCREATIONS_MN, "procreations per turn", &[ISLAND_ID_LN]);
+    //    metrics.register_int_gauge_vec(DEADS_MN, "deads per turn", &[ISLAND_ID_LN]);
+    //    metrics.register_int_gauge_vec(MEETINGS_MN, "meetings per turn", &[ISLAND_ID_LN]);
+    //    metrics.register_gauge_vec(BEST_FITNESS_MN, "best fitness in turn", &[ISLAND_ID_LN]);
+    //    metrics.register_int_gauge_vec(ALL_RECV_MIGR_MN, "all recv migrations", &[ISLAND_ID_LN]);
+    //    metrics.register_int_gauge_vec(ALL_SENT_MIGR_MN, "all sent migrations", &[ISLAND_ID_LN]);
+    //    metrics.register_int_gauge_vec(LOC_RECV_MIGR_MN, "local sent migrations", &[ISLAND_ID_LN]);
+    //    metrics.register_int_gauge_vec(GLOB_RECV_MIGR_MN, "global sent migrations", &[ISLAND_ID_LN]);
 }

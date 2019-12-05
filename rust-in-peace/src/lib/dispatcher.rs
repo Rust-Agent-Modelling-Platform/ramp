@@ -1,9 +1,9 @@
-use std::sync::mpsc::Sender;
 use crate::message::Message;
 use crate::network;
 use crate::network::{DispatcherNetworkCtx, Ip, Port};
 use rand::{thread_rng, Rng};
 use std::sync::mpsc::Receiver;
+use std::sync::mpsc::Sender;
 
 pub type Addr = (Ip, Port);
 
@@ -13,7 +13,7 @@ pub enum DispatcherMessage {
     Unicast(Message, Addr),
     Broadcast(Message),
     Info(Message),
-    Server(Message)
+    Server(Message),
 }
 
 pub struct Dispatcher {
@@ -43,7 +43,9 @@ impl Dispatcher {
         let mut fin_sim = false;
         let mut confirmations = 0;
         let from = self.nt_ctx.nt_sett.host_ip.clone();
-        self.sim_tx.send(Message::Ok);
+        self.sim_tx
+            .send(Message::Ok)
+            .expect("Error sending to sim_tx");
         while !fin_sim {
             let incoming = self.rx.try_iter();
             for msg in incoming {
@@ -62,7 +64,7 @@ impl Dispatcher {
                     }
                     DispatcherMessage::Unicast(msg, addr) => {
                         let key = format!("{}:{}", addr.0, addr.1);
-                        network::send_ps(&self.nt_ctx.pub_sock, key, from.clone(), msg.into())
+                        network::send_ps(&self.nt_ctx.pub_sock, key, from.clone(), msg)
                     }
                     DispatcherMessage::Broadcast(Message::Agent(_)) => {
                         let key = String::from(network::BROADCAST_KEY);
@@ -71,7 +73,12 @@ impl Dispatcher {
                     DispatcherMessage::Broadcast(Message::Islands(island_ids)) => {
                         log::info!("ISLANDS MSG");
                         let key = String::from(network::BROADCAST_KEY);
-                        network::send_ps(&self.nt_ctx.pub_sock, key.clone(), from.clone(), Message::Islands(island_ids.clone()));
+                        network::send_ps(
+                            &self.nt_ctx.pub_sock,
+                            key.clone(),
+                            from.clone(),
+                            Message::Islands(island_ids.clone()),
+                        );
                     }
                     DispatcherMessage::Broadcast(Message::Owners(_)) => {
                         log::info!("OWNERS MSG");
@@ -79,10 +86,7 @@ impl Dispatcher {
                         network::send_ps(&self.nt_ctx.pub_sock, key, from.clone(), msg.into())
                     }
                     DispatcherMessage::Info(Message::HostReady) => {
-                        network::send_rr(&self.nt_ctx.s_req_sock,
-                                         from.clone(),
-                                         Message::HostReady
-                        );
+                        network::send_rr(&self.nt_ctx.s_req_sock, from.clone(), Message::HostReady);
                         let (_, _) = network::recv_rr(&self.nt_ctx.s_req_sock);
                     }
 
@@ -118,7 +122,7 @@ impl Into<Message> for DispatcherMessage {
             DispatcherMessage::Unicast(msg, _addr) => msg,
             DispatcherMessage::Broadcast(msg) => msg,
             DispatcherMessage::Info(msg) => msg,
-            DispatcherMessage::Server(msg) => msg
+            DispatcherMessage::Server(msg) => msg,
         }
     }
 }

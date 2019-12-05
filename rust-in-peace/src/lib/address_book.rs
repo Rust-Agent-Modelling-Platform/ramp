@@ -1,4 +1,4 @@
-use crate::dispatcher::{DispatcherMessage, Addr};
+use crate::dispatcher::{Addr, DispatcherMessage};
 use rand::{thread_rng, Rng};
 use std::sync::mpsc::Sender;
 
@@ -43,15 +43,17 @@ impl AddressBook {
         }
     }
 
-    pub fn send_to_local(&mut self, island_id: Uuid, msg: Message) -> Result<(), SendError<Message>> {
+    pub fn send_to_local(
+        &mut self,
+        island_id: Uuid,
+        msg: Message,
+    ) -> Result<(), SendError<Message>> {
         let island = self.islands.iter().position(|&id| id == island_id).unwrap();
 
         match self.addresses.get(island) {
             Some(tx) => match tx.send(msg) {
                 Ok(()) => Ok(()),
-                Err(e) => {
-                    Err(SendError(e.0))
-                }
+                Err(e) => Err(SendError(e.0)),
             },
             None => Err(SendError(msg)),
         }

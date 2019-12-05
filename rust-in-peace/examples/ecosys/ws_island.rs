@@ -1,21 +1,15 @@
-
-use uuid::Uuid;
-use rust_in_peace::message::Message;
-use rust_in_peace::island::{Island, IslandEnv};
-use rust_in_peace::map::{MapInstance, FragmentOwner};
-use std::sync::Arc;
-use crate::settings::{SheepSettings, WolfSettings, IslandSettings};
+use crate::agent_types::AgentType;
+use crate::settings::{IslandSettings, SheepSettings, WolfSettings};
 use crate::sheep::Sheep;
 use crate::wolves::Wolves;
-use crate::{ws_utils};
-use crate::agent_types::AgentType;
-use std::ops::Range;
+use crate::ws_utils;
 use rand::Rng;
-
-pub struct Stats {
-    number_of_wolves: u64,
-    number_of_sheep: u64
-}
+use rust_in_peace::island::{Island, IslandEnv};
+use rust_in_peace::map::{FragmentOwner, MapInstance};
+use rust_in_peace::message::Message;
+use std::ops::Range;
+use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct WSIsland {
     pub id: Uuid,
@@ -34,21 +28,20 @@ pub struct WSIsland {
     pub outgoing_global: Vec<(AgentType, Uuid, FragmentOwner)>,
 
     pub new_sheep: Vec<Uuid>,
-    pub new_wolves: Vec<Uuid>
-
+    pub new_wolves: Vec<Uuid>,
 }
 enum MoveVector {
     North,
     East,
     South,
     West,
-    None
+    None,
 }
 enum BoundaryCheck {
     InBoundary,
     OutBoundaryLocal(FragmentOwner),
     OutBoundaryGlobal(FragmentOwner),
-    Impossible
+    Impossible,
 }
 
 impl Island for WSIsland {
@@ -58,8 +51,14 @@ impl Island for WSIsland {
         self.map = Some(map);
 
         let range = self.map.as_ref().unwrap().get_my_range();
-        self.sheep.set_initial_sheep_positions(range.clone(), self.map.as_ref().unwrap().map.chunk_len.clone());
-        self.wolves.set_initial_wolf_positions(range.clone(), self.map.as_ref().unwrap().map.chunk_len.clone());
+        self.sheep.set_initial_sheep_positions(
+            range.clone(),
+            self.map.as_ref().unwrap().map.chunk_len.clone(),
+        );
+        self.wolves.set_initial_wolf_positions(
+            range.clone(),
+            self.map.as_ref().unwrap().map.chunk_len.clone(),
+        );
 
         self.map.as_mut().unwrap().init_with_val(0);
     }
@@ -79,16 +78,18 @@ impl Island for WSIsland {
     }
 
     fn on_finish(&mut self) {
-        let duration = self.island_env.start_time.elapsed().as_secs();
+        let _duration = self.island_env.start_time.elapsed().as_secs();
         self.display_final_stats();
     }
 }
 impl WSIsland {
-    pub fn new(id: Uuid,
-               island_env: IslandEnv,
-               island_settings: Arc<IslandSettings>,
-               sheep_settings: Arc<SheepSettings>,
-               wolf_settings: Arc<WolfSettings>) -> Self {
+    pub fn new(
+        id: Uuid,
+        island_env: IslandEnv,
+        island_settings: Arc<IslandSettings>,
+        sheep_settings: Arc<SheepSettings>,
+        wolf_settings: Arc<WolfSettings>,
+    ) -> Self {
         Self {
             id,
             island_env,
@@ -103,7 +104,7 @@ impl WSIsland {
             outgoing_local: vec![],
             outgoing_global: vec![],
             new_sheep: vec![],
-            new_wolves: vec![]
+            new_wolves: vec![],
         }
     }
 
@@ -123,7 +124,7 @@ impl WSIsland {
                         AgentType::Sheep => {
                             log::warn!("Received new sheep {} with position {:?}", id, position);
                             self.sheep.add_new_sheep(id, energy, position)
-                        },
+                        }
                         AgentType::Wolf => {
                             log::warn!("Received new wolf {} with position {:?}", id, position);
                             self.wolves.add_new_wolf(id, energy, position)
@@ -139,17 +140,27 @@ impl WSIsland {
     fn do_sheep_turn(&mut self) {
         log::info!("Beginning sheep turn in {}", &self.id.to_string()[..8]);
         if self.sheep.id.is_empty() {
-            log::warn!("There are no more sheep on island {}", &self.id.to_string()[..8]);
+            log::warn!(
+                "There are no more sheep on island {}",
+                &self.id.to_string()[..8]
+            );
             return;
         }
         let range = self.map.as_ref().unwrap().get_my_range();
         for sheep in &self.sheep.id {
             self.sheep.print_sheep(sheep);
 
-            let grass = self.map.as_ref().unwrap().get_value(*self.sheep.position.get(sheep).unwrap());
+            let grass = self
+                .map
+                .as_ref()
+                .unwrap()
+                .get_value(*self.sheep.position.get(sheep).unwrap());
             if grass == 0 {
                 *self.sheep.energy.get_mut(sheep).unwrap() += self.sheep_settings.energy_gain;
-                self.map.as_mut().unwrap().update_value(-1, *self.sheep.position.get(sheep).unwrap());
+                self.map
+                    .as_mut()
+                    .unwrap()
+                    .update_value(-1, *self.sheep.position.get(sheep).unwrap());
             }
 
             if self.is_reproducing() {
@@ -163,7 +174,8 @@ impl WSIsland {
             log::info!("The new position for this sheep is to be {:?}", new_pos);
 
             //log::info!("Verifying range {:?} for pos {:?}", &range, &new_pos);
-            let move_action = self.determine_move_action(&new_pos, &range, &self.map.as_ref().unwrap());
+            let move_action =
+                self.determine_move_action(&new_pos, &range, &self.map.as_ref().unwrap());
 
             *self.sheep.position.get_mut(&sheep).unwrap() = new_pos;
             *self.sheep.energy.get_mut(sheep).unwrap() -= self.sheep_settings.energy_loss;
@@ -177,12 +189,16 @@ impl WSIsland {
                 }
                 BoundaryCheck::OutBoundaryLocal(owner) => {
                     log::info!("Sending to local island {} ", &owner.2.to_string()[..8]);
-                    self.outgoing_local.push((AgentType:: Sheep, *sheep, owner));
+                    self.outgoing_local.push((AgentType::Sheep, *sheep, owner));
                     self.remove_sheep.push(*sheep);
                 }
                 BoundaryCheck::OutBoundaryGlobal(owner) => {
                     let address = &format!("{}:{}", owner.0.to_string(), owner.1.to_string());
-                    log::info!("Sent to host {} to island {}", address, &owner.2.to_string()[..8]);
+                    log::info!(
+                        "Sent to host {} to island {}",
+                        address,
+                        &owner.2.to_string()[..8]
+                    );
                     self.outgoing_global.push((AgentType::Sheep, *sheep, owner));
                     self.remove_sheep.push(*sheep);
                 }
@@ -197,14 +213,21 @@ impl WSIsland {
     fn do_wolf_turn(&mut self) {
         log::info!("Beginning wolf turn in {}", &self.id.to_string()[..8]);
         if self.wolves.id.is_empty() {
-            log::warn!("There are no more wolves on island {}", &self.id.to_string()[..8]);
+            log::warn!(
+                "There are no more wolves on island {}",
+                &self.id.to_string()[..8]
+            );
             return;
         }
         let range = self.map.as_ref().unwrap().get_my_range();
         for wolf in &self.wolves.id {
             let prey = self.check_for_sheep_at_position(*self.wolves.position.get(wolf).unwrap());
             if prey != None {
-                log::warn!("Wolf {} is consuming sheep {}", &wolf.to_string()[..8], &prey.unwrap().to_string()[..8]);
+                log::warn!(
+                    "Wolf {} is consuming sheep {}",
+                    &wolf.to_string()[..8],
+                    &prey.unwrap().to_string()[..8]
+                );
                 self.remove_sheep.push(prey.unwrap());
                 *self.wolves.energy.get_mut(wolf).unwrap() += self.wolf_settings.energy_gain;
             }
@@ -235,13 +258,20 @@ impl WSIsland {
                     log::info!("This position is in the current range ");
                 }
                 BoundaryCheck::OutBoundaryLocal(owner) => {
-                    log::info!("This should be sent to local island {} ", &owner.2.to_string()[..8]);
+                    log::info!(
+                        "This should be sent to local island {} ",
+                        &owner.2.to_string()[..8]
+                    );
                     self.outgoing_local.push((AgentType::Wolf, *wolf, owner));
                     self.remove_wolves.push(*wolf);
                 }
                 BoundaryCheck::OutBoundaryGlobal(owner) => {
                     let address = &format!("{}:{}", owner.0.to_string(), owner.1.to_string());
-                    log::info!("This should be sent to host {} to island {}", address, &owner.2.to_string()[..8]);
+                    log::info!(
+                        "This should be sent to host {} to island {}",
+                        address,
+                        &owner.2.to_string()[..8]
+                    );
                     self.outgoing_global.push((AgentType::Wolf, *wolf, owner));
                     self.remove_wolves.push(*wolf);
                 }
@@ -256,13 +286,11 @@ impl WSIsland {
     fn update_grass(&mut self) {
         for val in self.map.as_mut().unwrap().data.iter_mut() {
             if *val == -1 {
-                *val=self.island_settings.grass_interval;
-            }
-            else if *val == 0 {
+                *val = self.island_settings.grass_interval;
+            } else if *val == 0 {
                 continue;
-            }
-            else if 0 < *val && *val <= self.island_settings.grass_interval {
-                *val=*val-1;
+            } else if 0 < *val && *val <= self.island_settings.grass_interval {
+                *val = *val - 1;
             }
         }
     }
@@ -272,21 +300,35 @@ impl WSIsland {
             let serialized;
             match agent_type {
                 AgentType::Sheep => {
-                    log::warn!("Sending sheep {} with position {:?} to local island", &id.to_string()[..8], *self.sheep.position.get(&id).unwrap());
-                    serialized = ws_utils::serialize(AgentType::Sheep,
-                                                         *id,
-                                                         *self.sheep.energy.get(id).unwrap(),
-                                                         *self.sheep.position.get(id).unwrap());
-                },
+                    log::warn!(
+                        "Sending sheep {} with position {:?} to local island",
+                        &id.to_string()[..8],
+                        *self.sheep.position.get(&id).unwrap()
+                    );
+                    serialized = ws_utils::serialize(
+                        AgentType::Sheep,
+                        *id,
+                        *self.sheep.energy.get(id).unwrap(),
+                        *self.sheep.position.get(id).unwrap(),
+                    );
+                }
                 AgentType::Wolf => {
-                    log::warn!("Sending wolf {} with position {:?} to local island", &id.to_string()[..8], *self.wolves.position.get(&id).unwrap());
-                    serialized = ws_utils::serialize(AgentType::Wolf,
-                                                         *id,
-                                                         *self.wolves.energy.get(id).unwrap(),
-                                                         *self.wolves.position.get(id).unwrap());
+                    log::warn!(
+                        "Sending wolf {} with position {:?} to local island",
+                        &id.to_string()[..8],
+                        *self.wolves.position.get(&id).unwrap()
+                    );
+                    serialized = ws_utils::serialize(
+                        AgentType::Wolf,
+                        *id,
+                        *self.wolves.energy.get(id).unwrap(),
+                        *self.wolves.position.get(id).unwrap(),
+                    );
                 }
             }
-            self.island_env.send_to_local(*island_id, Message::Agent(serialized));
+            self.island_env
+                .send_to_local(*island_id, Message::Agent(serialized))
+                .expect("Error sending local migrant");
         }
     }
 
@@ -295,30 +337,47 @@ impl WSIsland {
             let serialized;
             match agent_type {
                 AgentType::Sheep => {
-                    log::warn!("Sending sheep {} with position {:?} to another host", &id.to_string()[..8], *self.sheep.position.get(&id).unwrap());
-                    serialized = ws_utils::serialize(AgentType::Sheep,
-                                                         *id,
-                                                         *self.sheep.energy.get(id).unwrap(),
-                                                         *self.sheep.position.get(id).unwrap());
-                },
+                    log::warn!(
+                        "Sending sheep {} with position {:?} to another host",
+                        &id.to_string()[..8],
+                        *self.sheep.position.get(&id).unwrap()
+                    );
+                    serialized = ws_utils::serialize(
+                        AgentType::Sheep,
+                        *id,
+                        *self.sheep.energy.get(id).unwrap(),
+                        *self.sheep.position.get(id).unwrap(),
+                    );
+                }
                 AgentType::Wolf => {
-                    log::warn!("Sending wolf {} with position {:?} to another host", &id.to_string()[..8], *self.wolves.position.get(&id).unwrap());
-                    serialized = ws_utils::serialize(AgentType::Wolf,
-                                                         *id,
-                                                         *self.wolves.energy.get(id).unwrap(),
-                                                         *self.wolves.position.get(id).unwrap());
+                    log::warn!(
+                        "Sending wolf {} with position {:?} to another host",
+                        &id.to_string()[..8],
+                        *self.wolves.position.get(&id).unwrap()
+                    );
+                    serialized = ws_utils::serialize(
+                        AgentType::Wolf,
+                        *id,
+                        *self.wolves.energy.get(id).unwrap(),
+                        *self.wolves.position.get(id).unwrap(),
+                    );
                 }
             }
-            self.island_env.send_to_global((ip.clone(), *port), Message::Agent(serialized));
+            self.island_env
+                .send_to_global((ip.clone(), *port), Message::Agent(serialized));
         }
     }
 
     fn add_new_agents(&mut self) {
         for new_sheep in self.new_sheep.iter_mut() {
-            self.sheep.add_new_sheep(*new_sheep,
-                                     self.sheep_settings.init_energy,
-                                     ws_utils::generate_random_position(&self.map.as_ref().unwrap().get_my_range(),
-                                                                        self.map.as_ref().unwrap().map.chunk_len.clone()));
+            self.sheep.add_new_sheep(
+                *new_sheep,
+                self.sheep_settings.init_energy,
+                ws_utils::generate_random_position(
+                    &self.map.as_ref().unwrap().get_my_range(),
+                    self.map.as_ref().unwrap().map.chunk_len.clone(),
+                ),
+            );
         }
     }
 
@@ -362,22 +421,27 @@ impl WSIsland {
             1 => MoveVector::East,
             2 => MoveVector::South,
             3 => MoveVector::West,
-            _ => MoveVector::None
+            _ => MoveVector::None,
         }
     }
 
     fn get_new_position(&self, pos: (i64, i64), delta: MoveVector) -> (i64, i64) {
         match delta {
-            MoveVector::North => (pos.0, pos.1+1),
-            MoveVector::East => (pos.0+1, pos.1),
-            MoveVector::South =>(pos.0-1, pos.1),
-            MoveVector::West => (pos.0, pos.1-1),
-            MoveVector::None => pos
+            MoveVector::North => (pos.0, pos.1 + 1),
+            MoveVector::East => (pos.0 + 1, pos.1),
+            MoveVector::South => (pos.0 - 1, pos.1),
+            MoveVector::West => (pos.0, pos.1 - 1),
+            MoveVector::None => pos,
         }
     }
 
-    fn determine_move_action(&self, pos: &(i64, i64), range: &Range<u64>, map_instance: &MapInstance) -> BoundaryCheck {
-        if pos.0 < 0 || pos.1 < 0  || pos.0 > map_instance.map.chunk_len - 1 {
+    fn determine_move_action(
+        &self,
+        pos: &(i64, i64),
+        range: &Range<u64>,
+        map_instance: &MapInstance,
+    ) -> BoundaryCheck {
+        if pos.0 < 0 || pos.1 < 0 || pos.0 > map_instance.map.chunk_len - 1 {
             return BoundaryCheck::Impossible;
         }
         let offset = map_instance.pos_to_offset(pos.0, pos.1) as u64;
@@ -394,7 +458,7 @@ impl WSIsland {
                 let destination = map_instance.map.owners.get(owner.unwrap()).unwrap();
                 let dest_copy = (destination.0.clone(), destination.1, destination.2);
                 if destination.0 == map_instance.fragment_owner.0 {
-                   return BoundaryCheck::OutBoundaryLocal(dest_copy);
+                    return BoundaryCheck::OutBoundaryLocal(dest_copy);
                 } else {
                     return BoundaryCheck::OutBoundaryGlobal(dest_copy);
                 }
@@ -406,10 +470,10 @@ impl WSIsland {
     fn check_for_sheep_at_position(&self, pos: (i64, i64)) -> Option<Uuid> {
         for (k, v) in self.sheep.position.iter() {
             if *v == pos {
-                return Some(*k)
+                return Some(*k);
             }
         }
-        return None
+        return None;
     }
 
     fn display_turn_stats(&self) {

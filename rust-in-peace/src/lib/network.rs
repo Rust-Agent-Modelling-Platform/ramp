@@ -133,10 +133,20 @@ impl NetworkCtx {
             let coord_ip = self.settings.coordinator_ip.clone();
             let coord_rep_port = self.settings.coordinator_rep_port;
             bind_sock(&self.rep_sock, coord_ip, coord_rep_port);
-            ip_table = wait_for_hosts(&self.rep_sock, &self.private_key, self.settings.hosts_num, false);
+            ip_table = wait_for_hosts(
+                &self.rep_sock,
+                &self.private_key,
+                self.settings.hosts_num,
+                false,
+            );
             self.connect(&ip_table);
             publish_ip_table(&self.pub_sock, &self.private_key, &ip_table);
-            wait_for_confirmations(&self.rep_sock, &self.private_key, self.settings.hosts_num, false);
+            wait_for_confirmations(
+                &self.rep_sock,
+                &self.private_key,
+                self.settings.hosts_num,
+                false,
+            );
             self.publish_start_sim();
         } else {
             let coord_ip = self.settings.coordinator_ip.clone();
@@ -248,7 +258,12 @@ pub fn publish_ip_table(pub_sock: &Socket, identity: &str, ip_table: &[(Ip, Port
     send_ps(pub_sock, key, from, msg);
 }
 
-pub fn wait_for_hosts(rep_sock: &Socket, identity: &str, hosts: u32, is_server: bool) -> Vec<(Ip, Port)> {
+pub fn wait_for_hosts(
+    rep_sock: &Socket,
+    identity: &str,
+    hosts: u32,
+    is_server: bool,
+) -> Vec<(Ip, Port)> {
     let mut host_count = hosts;
     if !is_server {
         host_count -= 1;

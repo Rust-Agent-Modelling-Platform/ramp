@@ -2,15 +2,12 @@
 extern crate serde_derive;
 
 use rust_in_peace::island::{Island, IslandEnv, IslandFactory};
-use rust_in_peace::simulation::Simulation;
-use rust_in_peace::utils;
-use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::map_island::MapIsland;
 
-mod map_island;
 mod map_agent;
+mod map_island;
 
 struct MapIslandFactory;
 
@@ -22,6 +19,6 @@ impl IslandFactory for MapIslandFactory {
 }
 
 fn main() {
-    let factory = MapIslandFactory {};
-    Simulation::start_simulation(Box::new(factory));
+    //let factory = MapIslandFactory {};
+    //Simulation::start_simulation(Box::new(factory));
 }

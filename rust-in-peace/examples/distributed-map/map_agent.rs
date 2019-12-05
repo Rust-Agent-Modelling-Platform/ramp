@@ -1,3 +1,3 @@
 struct MapAgent {
-    position: (u32, u32)
+    position: (u32, u32),
 }
