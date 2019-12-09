@@ -27,6 +27,30 @@ impl MetricHub {
         );
     }
 
+    pub fn set_gauge_vec(&self, name: &str, labels: &[&str], value: f64) {
+        if let Some(gauge) = self.gauges_vec.get(name) {
+            gauge.with_label_values(labels).set(value);
+        }
+    }
+    
+    pub fn add_gauge_vec(&self, name: &str, labels: &[&str], value: f64) {
+        if let Some(gauge) = self.gauges_vec.get(name) {
+            gauge.with_label_values(labels).add(value);
+        }
+    }
+
+    pub fn inc_gauge_vec(&self, name: &str, labels: &[&str]) {
+        if let Some(gauge) = self.gauges_vec.get(name) {
+            gauge.with_label_values(labels).inc();
+        }
+    }
+
+    pub fn reset_gauge_vec(&self, name: &str) {
+        if let Some(gauge) = self.gauges_vec.get(name) {
+            gauge.reset();
+        }
+    }
+
     pub fn register_int_gauge_vec(&mut self, name: &str, desc: &str, labels: &[&str]) {
         self.int_gauges_vec.insert(
             name.to_owned(),
@@ -34,27 +58,15 @@ impl MetricHub {
         );
     }
 
-    pub fn set_gauge_vec(&self, name: &str, labels: &[&str], value: f64) {
-        if let Some(gauge) = self.gauges_vec.get(name) {
+    pub fn set_int_gauge_vec(&self, name: &str, labels: &[&str], value: i64) {
+        if let Some(gauge) = self.int_gauges_vec.get(name) {
             gauge.with_label_values(labels).set(value);
-        }
-    }
-
-    pub fn add_gauge_vec(&self, name: &str, labels: &[&str], value: f64) {
-        if let Some(gauge) = self.gauges_vec.get(name) {
-            gauge.with_label_values(labels).add(value);
         }
     }
 
     pub fn add_int_gauge_vec(&self, name: &str, labels: &[&str], value: i64) {
         if let Some(gauge) = self.int_gauges_vec.get(name) {
             gauge.with_label_values(labels).add(value);
-        }
-    }
-
-    pub fn set_int_gauge_vec(&self, name: &str, labels: &[&str], value: i64) {
-        if let Some(gauge) = self.int_gauges_vec.get(name) {
-            gauge.with_label_values(labels).set(value);
         }
     }
 
