@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::action::Action;
 use crate::agent::Agent;
 use crate::settings::AgentSettings;
+use crate::utils;
 use rust_in_peace::island::{Island, IslandEnv};
 use rust_in_peace::message::Message;
 
@@ -98,10 +99,6 @@ impl MyIsland {
         }
     }
 
-    pub fn short_id(&self) -> String {
-        String::from(&self.id.to_string()[..5])
-    }
-
     pub fn get_best_fitness(&self) -> Option<f64> {
         let mut top_guy = match self.id_agent_map.values().take(1).last() {
             Some(a) => a,
@@ -132,7 +129,7 @@ impl MyIsland {
             Some(fitness) => {
                 self.island_env.metric_hub.set_gauge_vec(
                     BEST_FITNESS_MN,
-                    &[&self.short_id()],
+                    &[&utils::short_id(&self.id)],
                     fitness,
                 );
                 log::debug!("Best agent this turn: {}", fitness.to_string().blue());
@@ -201,7 +198,7 @@ impl MyIsland {
 
         self.island_env.metric_hub.add_int_gauge_vec(
             PROCREATIONS_MN,
-            &[&self.short_id()],
+            &[&utils::short_id(&self.id)],
             procreating_num,
         );
     }
@@ -230,10 +227,11 @@ impl MyIsland {
             agent1.meet(&mut agent2);
             meeting_num += 1;
         }
-        let id = &self.id.to_string()[..5];
-        self.island_env
-            .metric_hub
-            .add_int_gauge_vec(MEETINGS_MN, &[id], meeting_num);
+        self.island_env.metric_hub.add_int_gauge_vec(
+            MEETINGS_MN,
+            &[&utils::short_id(&self.id)],
+            meeting_num,
+        );
     }
 
     pub fn resolve_migrations(&mut self) {
@@ -270,17 +268,17 @@ impl MyIsland {
 
         self.island_env.metric_hub.add_int_gauge_vec(
             ALL_SENT_MIGR_MN,
-            &[&self.short_id()],
+            &[&utils::short_id(&self.id)],
             local_migrations_num + global_migrations_num,
         );
         self.island_env.metric_hub.add_int_gauge_vec(
             LOC_RECV_MIGR_MN,
-            &[&self.short_id()],
+            &[&utils::short_id(&self.id)],
             local_migrations_num,
         );
         self.island_env.metric_hub.add_int_gauge_vec(
             GLOB_RECV_MIGR_MN,
-            &[&self.short_id()],
+            &[&utils::short_id(&self.id)],
             global_migrations_num,
         );
         self.id_queues.migrating_ids.clear();
@@ -297,7 +295,7 @@ impl MyIsland {
         }
         self.island_env.metric_hub.add_int_gauge_vec(
             DEADS_MN,
-            &[&self.short_id()],
+            &[&utils::short_id(&self.id)],
             deads_in_turn as i64,
         );
         self.id_queues.dead_ids.clear();
@@ -318,7 +316,7 @@ impl MyIsland {
         }
         self.island_env.metric_hub.add_int_gauge_vec(
             ALL_RECV_MIGR_MN,
-            &[&self.short_id()],
+            &[&utils::short_id(&self.id)],
             migrants_num,
         );
     }

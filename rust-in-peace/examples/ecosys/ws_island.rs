@@ -1,8 +1,11 @@
 use crate::agent_types::AgentType;
 use crate::settings::{IslandSettings, SheepSettings, WolfSettings};
 use crate::sheep::Sheep;
+use crate::utils;
 use crate::wolves::Wolves;
 use crate::ws_utils;
+use crate::SHEEP_MN;
+use crate::WOLVES_MN;
 use rand::Rng;
 use rust_in_peace::island::{Island, IslandEnv};
 use rust_in_peace::map::{FragmentOwner, MapInstance};
@@ -75,6 +78,7 @@ impl Island for WSIsland {
         self.remove_dead_agents();
         self.clear_queues();
         self.display_turn_stats();
+        self.update_metrics();
     }
 
     fn on_finish(&mut self) {
@@ -474,6 +478,19 @@ impl WSIsland {
             }
         }
         return None;
+    }
+
+    fn update_metrics(&self) {
+        self.island_env.metric_hub.set_int_gauge_vec(
+            WOLVES_MN,
+            &[&utils::short_id(&self.id)],
+            self.wolves.id.len() as i64,
+        );
+        self.island_env.metric_hub.set_int_gauge_vec(
+            SHEEP_MN,
+            &[&utils::short_id(&self.id)],
+            self.sheep.id.len() as i64,
+        );
     }
 
     fn display_turn_stats(&self) {

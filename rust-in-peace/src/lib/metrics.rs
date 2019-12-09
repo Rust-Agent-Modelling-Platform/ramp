@@ -52,6 +52,12 @@ impl MetricHub {
         }
     }
 
+    pub fn set_int_gauge_vec(&self, name: &str, labels: &[&str], value: i64) {
+        if let Some(gauge) = self.int_gauges_vec.get(name) {
+            gauge.with_label_values(labels).set(value);
+        }
+    }
+
     pub fn inc_int_gauge_vec(&self, name: &str, labels: &[&str]) {
         if let Some(gauge) = self.int_gauges_vec.get(name) {
             gauge.with_label_values(labels).inc();
