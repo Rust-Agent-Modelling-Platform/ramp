@@ -29,6 +29,9 @@ impl AddressBook {
     }
 
     pub fn send_to_rnd_local(&mut self, msg: Message) -> Result<(), SendError<Message>> {
+        if self.addresses.is_empty() {
+            return Err(SendError(msg));
+        }
         let island = thread_rng().gen_range(0, self.addresses.len());
         match self.addresses.get(island) {
             Some(tx) => match tx.send(msg) {
@@ -49,7 +52,6 @@ impl AddressBook {
         msg: Message,
     ) -> Result<(), SendError<Message>> {
         let island = self.islands.iter().position(|&id| id == island_id).unwrap();
-
         match self.addresses.get(island) {
             Some(tx) => match tx.send(msg) {
                 Ok(()) => Ok(()),
