@@ -86,7 +86,7 @@ impl Agent {
     }
 
     pub fn crossover(genotype1: &[f64], genotype2: &[f64]) -> Vec<f64> {
-        let division_point = thread_rng().gen_range(0, genotype1.len());
+        let division_point = thread_rng().gen_range(1, genotype1.len());
         let mut new_genotype = vec![];
         let head = &genotype1[..division_point];
         let tail = &genotype2[division_point..];
@@ -121,5 +121,84 @@ impl Agent {
 impl fmt::Display for Agent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.as_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Agent;
+    use crate::functions;
+    use crate::settings::AgentSettings;
+    use std::sync::Arc;
+    use uuid::Uuid;
+
+    #[test]
+    fn test_crossover() {
+        let genotype1 = [0.0, 0.0, 0.0, 0.0];
+        let genotype2 = [1.0, 1.0, 1.0, 1.0];
+
+        let new = Agent::crossover(&genotype1, &genotype2);
+        assert_ne!(genotype1, &new[..]);
+        assert_ne!(genotype2, &new[..]);
+
+        let genotype1 = [0.0, 0.0];
+        let genotype2 = [1.0, 1.0];
+
+        let new = Agent::crossover(&genotype1, &genotype2);
+        assert_ne!(genotype1, &new[..]);
+        assert_ne!(genotype2, &new[..]);
+    }
+
+    #[test]
+    fn test_mutate_genotype() {
+        let config = AgentSettings {
+            genotype_dim: 0,
+            initial_energy: 0,
+            minimum: false,
+            mutation_rate: 1.0,
+            procreation_prob: 0,
+            procreation_penalty: 0.0,
+            meeting_penalty: 0,
+            lower_bound: -3.0,
+            upper_bound: 3.0,
+        };
+        let mut genotype = vec![0.0, 0.3, 1.0, 0.5];
+        let genotype_copy = genotype.clone();
+        Agent::mutate_genotype(&config, &mut genotype);
+        assert_ne!(genotype, genotype_copy);
+    }
+
+    #[test]
+    fn test_meet() {
+        let config_mock = AgentSettings {
+            genotype_dim: 0,
+            initial_energy: 0,
+            minimum: false,
+            mutation_rate: 0.0,
+            procreation_prob: 0,
+            procreation_penalty: 0.0,
+            meeting_penalty: 10,
+            lower_bound: 0.0,
+            upper_bound: 0.0,
+        };
+
+        let agent1 = Agent::new(
+            Uuid::new_v4(),
+            Arc::new(config_mock),
+            vec![0.0, 0.0, 0.0, 0.0],
+            &functions::rastrigin,
+            100,
+        );
+        let agent2 = Agent::new(
+            Uuid::new_v4(),
+            Arc::new(config_mock),
+            vec![1.0, 1.0, 1.0, 1.0],
+            &functions::rastrigin,
+            100,
+        );
+
+        agent1.borrow_mut().meet(&mut agent2.borrow_mut());
+        assert_ne!(agent1.borrow().energy, 100);
+        assert_ne!(agent2.borrow().energy, 100);
     }
 }
