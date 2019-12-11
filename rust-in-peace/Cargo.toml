@@ -7,6 +7,14 @@ edition = "2018"
 [lib]
 path = "src/lib/lib.rs"
 
+[[example]]
+name = "ecosys"
+test = true
+
+[[example]]
+name = "fun-opt"
+test = true
+
 [dependencies]
 zmq = "0.9"
 rand = "0.7"

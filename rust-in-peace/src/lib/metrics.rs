@@ -32,7 +32,7 @@ impl MetricHub {
             gauge.with_label_values(labels).set(value);
         }
     }
-    
+
     pub fn add_gauge_vec(&self, name: &str, labels: &[&str], value: f64) {
         if let Some(gauge) = self.gauges_vec.get(name) {
             gauge.with_label_values(labels).add(value);
@@ -135,7 +135,7 @@ mod tests {
         let mut metrics = MetricHub::default();
 
         metrics.register_gauge_vec(metric_name, "test gauge desc", &["test_label"]);
-        
+
         metrics.set_gauge_vec(metric_name, metric_labels, 10.0);
         if let Some(gauge) = metrics.gauges_vec.get(metric_name) {
             let value = gauge.with_label_values(metric_labels).get();
@@ -151,7 +151,7 @@ mod tests {
         } else {
             panic!("No such metric");
         }
-        
+
         metrics.inc_gauge_vec(metric_name, metric_labels);
         if let Some(gauge) = metrics.gauges_vec.get(metric_name) {
             let value = gauge.with_label_values(metric_labels).get();
@@ -161,8 +161,8 @@ mod tests {
         }
 
         if let Some(_) = metrics.gauges_vec.get("different_metric_name") {
-            panic!("No such metric");            
-        }   
+            panic!("No such metric");
+        }
     }
 
     #[test]
@@ -198,7 +198,7 @@ mod tests {
         }
 
         if let Some(_) = metrics.int_gauges_vec.get("different_metric_name") {
-            panic!("No such metric");            
-        } 
+            panic!("No such metric");
+        }
     }
 }

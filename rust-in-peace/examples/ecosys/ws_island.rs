@@ -101,8 +101,8 @@ impl WSIsland {
             island_settings: island_settings.clone(),
             sheep_settings: sheep_settings.clone(),
             wolf_settings: wolf_settings.clone(),
-            sheep: Sheep::new(sheep_settings.clone()),
-            wolves: Wolves::new(wolf_settings.clone()),
+            sheep: Sheep::new(sheep_settings.init_num, sheep_settings.init_energy),
+            wolves: Wolves::new(wolf_settings.init_num, wolf_settings.init_energy),
             remove_sheep: vec![],
             remove_wolves: vec![],
             outgoing_local: vec![],
@@ -126,12 +126,12 @@ impl WSIsland {
                     let (agent_type, id, energy, position) = ws_utils::deserialize(migrant);
                     match agent_type {
                         AgentType::Sheep => {
-                            //log::warn!("Received new sheep {} with position {:?}", id, position);
-                            self.sheep.add_new_sheep(id, energy, position)
+                            log::debug!("Received new sheep {} with position {:?}", id, position);
+                            self.sheep.add_sheep(id, energy, position)
                         }
                         AgentType::Wolf => {
-                            //log::warn!("Received new wolf {} with position {:?}", id, position);
-                            self.wolves.add_new_wolf(id, energy, position)
+                            log::debug!("Received new wolf {} with position {:?}", id, position);
+                            self.wolves.add_wolf(id, energy, position)
                         }
                     }
                 }
@@ -144,10 +144,10 @@ impl WSIsland {
     fn do_sheep_turn(&mut self) {
         log::info!("Beginning sheep turn in {}", &self.id.to_string()[..8]);
         if self.sheep.id.is_empty() {
-            //            log::warn!(
-            //                "There are no more sheep on island {}",
-            //                &self.id.to_string()[..8]
-            //            );
+            log::debug!(
+                "There are no more sheep on island {}",
+                &self.id.to_string()[..8]
+            );
             return;
         }
         let range = self.map.as_ref().unwrap().get_my_range();
@@ -168,16 +168,16 @@ impl WSIsland {
             }
 
             if self.is_sheep_reproducing() {
-                // log::warn!("Sheep {} is reproducing", &sheep.to_string()[..8]);
+                log::debug!("Sheep {} is reproducing", &sheep.to_string()[..8]);
                 self.new_sheep.push(Uuid::new_v4());
             }
 
             let curr_pos = *self.sheep.position.get(&sheep).unwrap();
             let move_vector = self.get_random_movement_dir();
             let new_pos = self.get_new_position(curr_pos, move_vector);
-            //log::info!("The new position for this sheep is to be {:?}", new_pos);
+            log::debug!("The new position for this sheep is to be {:?}", new_pos);
 
-            //log::info!("Verifying range {:?} for pos {:?}", &range, &new_pos);
+            log::debug!("Verifying range {:?} for pos {:?}", &range, &new_pos);
             let move_action =
                 self.determine_move_action(&new_pos, &range, &self.map.as_ref().unwrap());
 
@@ -190,25 +190,25 @@ impl WSIsland {
 
             match move_action {
                 BoundaryCheck::InBoundary => {
-                    //log::info!("This position is in the current range ");
+                    log::debug!("This position is in the current range ");
                 }
                 BoundaryCheck::OutBoundaryLocal(owner) => {
-                    //log::info!("Sending to local island {} ", &owner.2.to_string()[..8]);
+                    log::debug!("Sending to local island {} ", &owner.2.to_string()[..8]);
                     self.outgoing_local.push((AgentType::Sheep, *sheep, owner));
                     self.remove_sheep.push(*sheep);
                 }
                 BoundaryCheck::OutBoundaryGlobal(owner) => {
                     let address = &format!("{}:{}", owner.0.to_string(), owner.1.to_string());
-                    //                    log::info!(
-                    //                        "Sent to host {} to island {}",
-                    //                        address,
-                    //                        &owner.2.to_string()[..8]
-                    //                    );
+                    log::debug!(
+                        "Sent to host {} to island {}",
+                        address,
+                        &owner.2.to_string()[..8]
+                    );
                     self.outgoing_global.push((AgentType::Sheep, *sheep, owner));
                     self.remove_sheep.push(*sheep);
                 }
                 _ => {
-                    //log::info!("Move out of bounds - sheep stays where it is");
+                    log::debug!("Move out of bounds - sheep stays where it is");
                     *self.sheep.position.get_mut(&sheep).unwrap() = curr_pos;
                 }
             }
@@ -218,36 +218,36 @@ impl WSIsland {
     fn do_wolf_turn(&mut self) {
         log::info!("Beginning wolf turn in {}", &self.id.to_string()[..8]);
         if self.wolves.id.is_empty() {
-            //            log::warn!(
-            //                "There are no more wolves on island {}",
-            //                &self.id.to_string()[..8]
-            //            );
+            log::debug!(
+                "There are no more wolves on island {}",
+                &self.id.to_string()[..8]
+            );
             return;
         }
         let range = self.map.as_ref().unwrap().get_my_range();
         for wolf in &self.wolves.id {
             let prey = self.check_for_sheep_at_position(*self.wolves.position.get(wolf).unwrap());
             if prey != None {
-                //                log::warn!(
-                //                    "Wolf {} is consuming sheep {}",
-                //                    &wolf.to_string()[..8],
-                //                    &prey.unwrap().to_string()[..8]
-                //                );
+               log::debug!(
+                   "Wolf {} is consuming sheep {}",
+                   &wolf.to_string()[..8],
+                   &prey.unwrap().to_string()[..8]
+               );
                 self.remove_sheep.push(prey.unwrap());
                 *self.wolves.energy.get_mut(wolf).unwrap() += self.wolf_settings.energy_gain;
             }
 
             if self.is_wolf_reproducing() {
-                //log::warn!("Wolf {} is reproducing", &wolf.to_string()[..8]);
+                log::debug!("Wolf {} is reproducing", &wolf.to_string()[..8]);
                 self.new_wolves.push(Uuid::new_v4());
             }
 
             let curr_pos = *self.wolves.position.get(&wolf).unwrap();
             let move_vector = self.get_random_movement_dir();
             let new_pos = self.get_new_position(curr_pos, move_vector);
-            //log::warn!("The new position for this wolf is to be {:?}", new_pos);
+            log::debug!("The new position for this wolf is to be {:?}", new_pos);
 
-            //log::info!("Verifying range {:?} for pos {:?}", &range, &new_pos);
+            log::debug!("Verifying range {:?} for pos {:?}", &range, &new_pos);
 
             let move_action =
                 self.determine_move_action(&new_pos, &range, &self.map.as_ref().unwrap());
@@ -261,28 +261,28 @@ impl WSIsland {
 
             match move_action {
                 BoundaryCheck::InBoundary => {
-                    //log::info!("This position is in the current range ");
+                    log::debug!("This position is in the current range ");
                 }
                 BoundaryCheck::OutBoundaryLocal(owner) => {
-                    //                    log::info!(
-                    //                        "This should be sent to local island {} ",
-                    //                        &owner.2.to_string()[..8]
-                    //                    );
+                   log::debug!(
+                       "This should be sent to local island {} ",
+                       &owner.2.to_string()[..8]
+                   );
                     self.outgoing_local.push((AgentType::Wolf, *wolf, owner));
                     self.remove_wolves.push(*wolf);
                 }
                 BoundaryCheck::OutBoundaryGlobal(owner) => {
                     let address = &format!("{}:{}", owner.0.to_string(), owner.1.to_string());
-                    //                    log::info!(
-                    //                        "This should be sent to host {} to island {}",
-                    //                        address,
-                    //                        &owner.2.to_string()[..8]
-                    //                    );
+                    log::debug!(
+                        "This should be sent to host {} to island {}",
+                        address,
+                        &owner.2.to_string()[..8]
+                    );
                     self.outgoing_global.push((AgentType::Wolf, *wolf, owner));
                     self.remove_wolves.push(*wolf);
                 }
                 _ => {
-                    //log::info!("Move out of bounds - sheep therefore stays where it is");
+                    log::debug!("Move out of bounds - sheep therefore stays where it is");
                     *self.wolves.position.get_mut(&wolf).unwrap() = curr_pos;
                 }
             }
@@ -290,17 +290,17 @@ impl WSIsland {
     }
 
     fn update_grass(&mut self) {
-        //log::warn!("Updating grass");
+        log::debug!("Updating grass");
         for val in self.map.as_mut().unwrap().data.iter_mut() {
-            //log::warn!("Value before: {}", *val);
+            log::debug!("Value before: {}", *val);
             if *val == -1 {
                 *val = self.island_settings.grass_interval + 1;
-            //log::warn!("Value after: {}", *val);
+            log::debug!("Value after: {}", *val);
             } else if *val == 0 {
                 continue;
             } else if 0 < *val && *val <= self.island_settings.grass_interval + 1 {
                 *val = *val - 1;
-                //log::warn!("Value after: {}", *val);
+                log::debug!("Value after: {}", *val);
             }
         }
     }
@@ -310,11 +310,11 @@ impl WSIsland {
             let serialized;
             match agent_type {
                 AgentType::Sheep => {
-                    //                    log::warn!(
-                    //                        "Sending sheep {} with position {:?} to local island",
-                    //                        &id.to_string()[..8],
-                    //                        *self.sheep.position.get(&id).unwrap()
-                    //                    );
+                    log::debug!(
+                        "Sending sheep {} with position {:?} to local island",
+                        &id.to_string()[..8],
+                        *self.sheep.position.get(&id).unwrap()
+                    );
                     serialized = ws_utils::serialize(
                         AgentType::Sheep,
                         *id,
@@ -323,11 +323,11 @@ impl WSIsland {
                     );
                 }
                 AgentType::Wolf => {
-                    //                    log::warn!(
-                    //                        "Sending wolf {} with position {:?} to local island",
-                    //                        &id.to_string()[..8],
-                    //                        *self.wolves.position.get(&id).unwrap()
-                    //                    );
+                    log::debug!(
+                        "Sending wolf {} with position {:?} to local island",
+                        &id.to_string()[..8],
+                        *self.wolves.position.get(&id).unwrap()
+                    );
                     serialized = ws_utils::serialize(
                         AgentType::Wolf,
                         *id,
@@ -347,11 +347,11 @@ impl WSIsland {
             let serialized;
             match agent_type {
                 AgentType::Sheep => {
-                    //                    log::warn!(
-                    //                        "Sending sheep {} with position {:?} to another host",
-                    //                        &id.to_string()[..8],
-                    //                        *self.sheep.position.get(&id).unwrap()
-                    //                    );
+                    log::debug!(
+                        "Sending sheep {} with position {:?} to another host",
+                        &id.to_string()[..8],
+                        *self.sheep.position.get(&id).unwrap()
+                    );
                     serialized = ws_utils::serialize(
                         AgentType::Sheep,
                         *id,
@@ -360,11 +360,11 @@ impl WSIsland {
                     );
                 }
                 AgentType::Wolf => {
-                    //                    log::warn!(
-                    //                        "Sending wolf {} with position {:?} to another host",
-                    //                        &id.to_string()[..8],
-                    //                        *self.wolves.position.get(&id).unwrap()
-                    //                    );
+                    log::debug!(
+                        "Sending wolf {} with position {:?} to another host",
+                        &id.to_string()[..8],
+                        *self.wolves.position.get(&id).unwrap()
+                    );
                     serialized = ws_utils::serialize(
                         AgentType::Wolf,
                         *id,
@@ -380,7 +380,7 @@ impl WSIsland {
 
     fn add_new_agents(&mut self) {
         for new_sheep in self.new_sheep.iter_mut() {
-            self.sheep.add_new_sheep(
+            self.sheep.add_sheep(
                 *new_sheep,
                 self.sheep_settings.init_energy,
                 ws_utils::generate_random_position(
@@ -390,7 +390,7 @@ impl WSIsland {
             );
         }
         for new_wolf in self.new_wolves.iter_mut() {
-            self.wolves.add_new_wolf(
+            self.wolves.add_wolf(
                 *new_wolf,
                 self.wolf_settings.init_energy,
                 ws_utils::generate_random_position(
@@ -402,19 +402,15 @@ impl WSIsland {
     }
 
     fn remove_dead_agents(&mut self) {
-        //log::warn!("Agents to be removed {:?}", &self.remove_sheep);
+        log::debug!("Agents to be removed {:?}", &self.remove_sheep);
         for dead_agent in self.remove_sheep.iter() {
-            self.sheep.id.retain(|&s| s != *dead_agent);
-            self.sheep.position.remove(dead_agent);
-            self.sheep.energy.remove(dead_agent);
+            self.sheep.remove_sheep(dead_agent);
         }
-        //log::warn!("Sheep after removal: {:?}", &self.sheep.id);
+        log::debug!("Sheep after removal: {:?}", &self.sheep.id);
         for dead_agent in self.remove_wolves.iter() {
-            self.wolves.id.retain(|&w| w != *dead_agent);
-            self.wolves.position.remove(dead_agent);
-            self.wolves.energy.remove(dead_agent);
+            self.wolves.remove_wolf(dead_agent);
         }
-        //log::warn!("Wolves after removal: {:?}", &self.wolves.id);
+        log::debug!("Wolves after removal: {:?}", &self.wolves.id);
     }
 
     fn clear_queues(&mut self) {
@@ -433,12 +429,13 @@ impl WSIsland {
     fn is_sheep_reproducing(&self) -> bool {
         let mut rng = rand::thread_rng();
         let chance = rng.gen_range(0.0, 1.0);
-        chance <= self.sheep.reproduction_chance
+        chance <= self.sheep_settings.reproduction_chance
     }
+
     fn is_wolf_reproducing(&self) -> bool {
         let mut rng = rand::thread_rng();
         let chance = rng.gen_range(0.0, 1.0);
-        chance <= self.wolves.reproduction_chance
+        chance <= self.wolf_settings.reproduction_chance
     }
 
     fn get_random_movement_dir(&self) -> MoveVector {
