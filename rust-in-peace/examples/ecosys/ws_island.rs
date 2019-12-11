@@ -228,11 +228,11 @@ impl WSIsland {
         for wolf in &self.wolves.id {
             let prey = self.check_for_sheep_at_position(*self.wolves.position.get(wolf).unwrap());
             if prey != None {
-               log::debug!(
-                   "Wolf {} is consuming sheep {}",
-                   &wolf.to_string()[..8],
-                   &prey.unwrap().to_string()[..8]
-               );
+                log::debug!(
+                    "Wolf {} is consuming sheep {}",
+                    &wolf.to_string()[..8],
+                    &prey.unwrap().to_string()[..8]
+                );
                 self.remove_sheep.push(prey.unwrap());
                 *self.wolves.energy.get_mut(wolf).unwrap() += self.wolf_settings.energy_gain;
             }
@@ -264,10 +264,10 @@ impl WSIsland {
                     log::debug!("This position is in the current range ");
                 }
                 BoundaryCheck::OutBoundaryLocal(owner) => {
-                   log::debug!(
-                       "This should be sent to local island {} ",
-                       &owner.2.to_string()[..8]
-                   );
+                    log::debug!(
+                        "This should be sent to local island {} ",
+                        &owner.2.to_string()[..8]
+                    );
                     self.outgoing_local.push((AgentType::Wolf, *wolf, owner));
                     self.remove_wolves.push(*wolf);
                 }
@@ -295,7 +295,7 @@ impl WSIsland {
             log::debug!("Value before: {}", *val);
             if *val == -1 {
                 *val = self.island_settings.grass_interval + 1;
-            log::debug!("Value after: {}", *val);
+                log::debug!("Value after: {}", *val);
             } else if *val == 0 {
                 continue;
             } else if 0 < *val && *val <= self.island_settings.grass_interval + 1 {

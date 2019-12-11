@@ -104,3 +104,87 @@ impl AddressBook {
             .unwrap();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::AddressBook;
+    use crate::message::Message;
+    use std::sync::mpsc;
+    use uuid::Uuid;
+
+    #[test]
+    fn test_send_to_rnd_local() -> Result<(), ()> {
+        let (dispatcher_tx, _dispatcher_rx) = mpsc::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let addresses = vec![tx1];
+        let islands = vec![Uuid::new_v4()];
+
+        let mut address_book = AddressBook::new(dispatcher_tx, addresses, islands);
+        address_book.send_to_rnd_local(Message::Ok).unwrap();
+        if let Some(Message::Ok) = rx1.try_iter().next() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
+    #[test]
+    fn test_send_to_local() -> Result<(), ()> {
+        let (dispatcher_tx, _dispatcher_rx) = mpsc::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        let addresses = vec![tx1, tx2, tx3];
+        let id1 = Uuid::new_v4();
+        let id2 = Uuid::new_v4();
+        let id3 = Uuid::new_v4();
+        let islands = vec![id1, id2, id3];
+
+        let mut address_book = AddressBook::new(dispatcher_tx, addresses, islands);
+        address_book.send_to_local(id1, Message::Ok).unwrap();
+        address_book.send_to_local(id3, Message::Ok).unwrap();
+
+        let mut counter = 0;
+        if let Some(Message::Ok) = rx1.try_iter().next() {
+            counter += 1;
+        }
+        if let Some(Message::Ok) = rx3.try_iter().next() {
+            counter += 1;
+        }
+        if let None = rx2.try_iter().next() {
+            counter += 1;
+        }
+
+        if counter == 3 {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
+    #[test]
+    fn test_send_to_all_local() -> Result<(), ()> {
+        let (dispatcher_tx, _dispatcher_rx) = mpsc::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let addresses = vec![tx1, tx2];
+        let islands = vec![Uuid::new_v4(), Uuid::new_v4()];
+
+        let mut address_book = AddressBook::new(dispatcher_tx, addresses, islands);
+        address_book.send_to_all_local(Message::Ok).unwrap();
+
+        let mut counter = 0;
+        if let Some(Message::Ok) = rx1.try_iter().next() {
+            counter += 1;
+        }
+        if let Some(Message::Ok) = rx2.try_iter().next() {
+            counter += 1;
+        }
+
+        if counter == 2 {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
