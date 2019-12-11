@@ -1,10 +1,10 @@
-turns = 5
-islands = 2
+turns = 500
+islands = 3
 islands_sync = true
 
 [network]
 is_coordinator = true
-hosts_num = 2
+hosts_num = 3
 coordinator_ip = "127.0.0.2"
 coordinator_rep_port = 4002
 coordinator_pub_port = 5008
@@ -19,4 +19,4 @@ server_rep_port = 7001
 server_pub_port = 7002
 
 [network.map]
-chunk_len = 5
+chunk_len = 10

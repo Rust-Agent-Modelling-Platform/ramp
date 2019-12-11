@@ -118,7 +118,7 @@ impl NetworkCtx {
         bind_sock(&self.pub_sock, host_ip.clone(), host_pub_port);
         self.subscribe();
 
-        let ip_table;
+        let mut ip_table;
         if self.settings.global_sync.sync {
             let server_ip = self.settings.global_sync.server_ip.clone();
             let server_rep_port = self.settings.global_sync.server_rep_port;
@@ -132,7 +132,8 @@ impl NetworkCtx {
         } else if self.settings.is_coordinator {
             let coord_ip = self.settings.coordinator_ip.clone();
             let coord_rep_port = self.settings.coordinator_rep_port;
-            bind_sock(&self.rep_sock, coord_ip, coord_rep_port);
+            let coord_pub_port = self.settings.coordinator_pub_port;
+            bind_sock(&self.rep_sock, coord_ip.clone(), coord_rep_port);
             ip_table = wait_for_hosts(
                 &self.rep_sock,
                 &self.private_key,
@@ -140,6 +141,7 @@ impl NetworkCtx {
                 false,
             );
             self.connect(&ip_table);
+            ip_table.push((coord_ip, coord_pub_port));
             publish_ip_table(&self.pub_sock, &self.private_key, &ip_table);
             wait_for_confirmations(
                 &self.rep_sock,

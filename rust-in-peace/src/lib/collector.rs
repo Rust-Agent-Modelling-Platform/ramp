@@ -84,7 +84,7 @@ impl Collector {
                             log::info!("{:?} (No more active ilsands in system)", e);
                         }
                     }
-                    _ => log::warn!("Unexpected message in collector {:#?}", msg),
+                    _ => log::debug!("Unexpected message in collector {:#?}", msg),
                 }
             }
         }

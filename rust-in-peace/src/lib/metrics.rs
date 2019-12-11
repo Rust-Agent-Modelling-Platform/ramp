@@ -27,13 +27,6 @@ impl MetricHub {
         );
     }
 
-    pub fn register_int_gauge_vec(&mut self, name: &str, desc: &str, labels: &[&str]) {
-        self.int_gauges_vec.insert(
-            name.to_owned(),
-            register_int_gauge_vec!(name, desc, labels).unwrap(),
-        );
-    }
-
     pub fn set_gauge_vec(&self, name: &str, labels: &[&str], value: f64) {
         if let Some(gauge) = self.gauges_vec.get(name) {
             gauge.with_label_values(labels).set(value);
@@ -43,6 +36,31 @@ impl MetricHub {
     pub fn add_gauge_vec(&self, name: &str, labels: &[&str], value: f64) {
         if let Some(gauge) = self.gauges_vec.get(name) {
             gauge.with_label_values(labels).add(value);
+        }
+    }
+
+    pub fn inc_gauge_vec(&self, name: &str, labels: &[&str]) {
+        if let Some(gauge) = self.gauges_vec.get(name) {
+            gauge.with_label_values(labels).inc();
+        }
+    }
+
+    pub fn reset_gauge_vec(&self, name: &str) {
+        if let Some(gauge) = self.gauges_vec.get(name) {
+            gauge.reset();
+        }
+    }
+
+    pub fn register_int_gauge_vec(&mut self, name: &str, desc: &str, labels: &[&str]) {
+        self.int_gauges_vec.insert(
+            name.to_owned(),
+            register_int_gauge_vec!(name, desc, labels).unwrap(),
+        );
+    }
+
+    pub fn set_int_gauge_vec(&self, name: &str, labels: &[&str], value: i64) {
+        if let Some(gauge) = self.int_gauges_vec.get(name) {
+            gauge.with_label_values(labels).set(value);
         }
     }
 
@@ -104,4 +122,83 @@ pub fn inc_received_messages(from: String, target: String, status: String) {
     TOTAL_RECV_MESSAGES_GAUGE
         .with_label_values(&[from.as_str(), target.as_str(), status.as_str()])
         .inc();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MetricHub;
+
+    #[test]
+    fn test_gauge_vec_api() {
+        let metric_name = "test_gauge1";
+        let metric_labels = &["l1"];
+        let mut metrics = MetricHub::default();
+
+        metrics.register_gauge_vec(metric_name, "test gauge desc", &["test_label"]);
+
+        metrics.set_gauge_vec(metric_name, metric_labels, 10.0);
+        if let Some(gauge) = metrics.gauges_vec.get(metric_name) {
+            let value = gauge.with_label_values(metric_labels).get();
+            assert_eq!(value, 10.0)
+        } else {
+            panic!("No such metric");
+        }
+
+        metrics.add_gauge_vec(metric_name, metric_labels, 2.0);
+        if let Some(gauge) = metrics.gauges_vec.get(metric_name) {
+            let value = gauge.with_label_values(metric_labels).get();
+            assert_eq!(value, 12.0)
+        } else {
+            panic!("No such metric");
+        }
+
+        metrics.inc_gauge_vec(metric_name, metric_labels);
+        if let Some(gauge) = metrics.gauges_vec.get(metric_name) {
+            let value = gauge.with_label_values(metric_labels).get();
+            assert_eq!(value, 13.0)
+        } else {
+            panic!("No such metric");
+        }
+
+        if let Some(_) = metrics.gauges_vec.get("different_metric_name") {
+            panic!("No such metric");
+        }
+    }
+
+    #[test]
+    fn test_int_gauge_vec_api() {
+        let metric_name = "test_int_gauge";
+        let metric_labels = &["l1"];
+        let mut metrics = MetricHub::default();
+
+        metrics.register_int_gauge_vec(metric_name, "test int gauge desc", &["test_label"]);
+
+        metrics.set_int_gauge_vec(metric_name, metric_labels, 10);
+        if let Some(gauge) = metrics.int_gauges_vec.get(metric_name) {
+            let value = gauge.with_label_values(metric_labels).get();
+            assert_eq!(value, 10)
+        } else {
+            panic!("No such metric");
+        }
+
+        metrics.add_int_gauge_vec(metric_name, metric_labels, 2);
+        if let Some(gauge) = metrics.int_gauges_vec.get(metric_name) {
+            let value = gauge.with_label_values(metric_labels).get();
+            assert_eq!(value, 12)
+        } else {
+            panic!("No such metric");
+        }
+
+        metrics.inc_int_gauge_vec(metric_name, metric_labels);
+        if let Some(gauge) = metrics.int_gauges_vec.get(metric_name) {
+            let value = gauge.with_label_values(metric_labels).get();
+            assert_eq!(value, 13)
+        } else {
+            panic!("No such metric");
+        }
+
+        if let Some(_) = metrics.int_gauges_vec.get("different_metric_name") {
+            panic!("No such metric");
+        }
+    }
 }

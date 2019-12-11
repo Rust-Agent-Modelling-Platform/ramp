@@ -82,6 +82,8 @@ fn start(
     let is_coordinator = dis_nt_ctx.nt_sett.is_coordinator;
     let host_ip = dis_nt_ctx.nt_sett.host_ip.clone();
     let host_port = dis_nt_ctx.nt_sett.pub_port;
+    let coord_ip = dis_nt_ctx.nt_sett.coordinator_ip.clone();
+    let coord_port = dis_nt_ctx.nt_sett.coordinator_pub_port;
     let mut ip_table = dis_nt_ctx.ip_table.clone();
 
     let coll_address_book = AddressBook {
@@ -109,9 +111,10 @@ fn start(
     let mut map_owners: MapOwners = HashMap::new();
     if !is_coordinator {
         dispatcher_tx
-            .send(DispatcherMessage::Broadcast(Message::Islands(
-                island_ids.clone(),
-            )))
+            .send(DispatcherMessage::Unicast(
+                Message::Islands(island_ids.clone()),
+                (coord_ip, coord_port),
+            ))
             .unwrap();
         let (_, _, msg) = network::recv_ps(&coll_nt_ctx.sub_sock);
         if let Message::Owners(owners) = msg {
