@@ -3,7 +3,7 @@ agents_number = 2
 grass_interval = 30
 
 [sheep_settings]
-init_num = 100
+init_num = 120
 init_energy = 10
 reproduction_chance = 0.1
 energy_gain = 4
@@ -12,6 +12,6 @@ energy_loss = 1
 [wolf_settings]
 init_num = 10
 init_energy = 10
-reproduction_chance = 0.05
+reproduction_chance = 0.1
 energy_gain = 10
 energy_loss = 3

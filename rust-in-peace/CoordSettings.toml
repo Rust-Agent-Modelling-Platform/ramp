@@ -1,10 +1,10 @@
 turns = 500
-islands = 2
+islands = 3
 islands_sync = true
 
 [network]
 is_coordinator = true
-hosts_num = 2
+hosts_num = 3
 coordinator_ip = "127.0.0.2"
 coordinator_rep_port = 4002
 coordinator_pub_port = 5008
