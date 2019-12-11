@@ -118,8 +118,10 @@ impl MapInstance {
         } else {
             offset - (range_start as i64 / scale) * scale
         };
-        log::info!("The local index for this position is {}", local_index);
+        //log::warn!("value before: {}", &self.data.get(local_index as usize).unwrap());
+        //log::info!("The local index for this position is {}", local_index);
         *self.data.get_mut(local_index as usize).unwrap() = new_val;
+        //log::warn!("value after: {}", &self.data.get(local_index as usize).unwrap());
     }
 
     //    pub fn get_neighbourhood(&self, x: u64, y: u64) -> Vec<(u64, u64)> {

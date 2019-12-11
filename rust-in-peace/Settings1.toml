@@ -1,4 +1,4 @@
-turns = 5
+turns = 500
 islands = 1
 islands_sync = true
 
@@ -19,4 +19,4 @@ server_rep_port = 7001
 server_pub_port = 7002
 
 [network.map]
-chunk_len = 5
+chunk_len = 10
