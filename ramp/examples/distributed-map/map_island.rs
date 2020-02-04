@@ -1,6 +1,6 @@
-use rust_in_peace::island::{Island, IslandEnv};
-use rust_in_peace::map::MapInstance;
-use rust_in_peace::message::Message;
+use ramp::island::{Island, IslandEnv};
+use ramp::map::MapInstance;
+use ramp::message::Message;
 use uuid::Uuid;
 
 pub struct MapIsland {

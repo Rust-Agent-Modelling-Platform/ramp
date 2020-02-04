@@ -1,15 +1,15 @@
 #[macro_use]
 extern crate serde_derive;
 
-use rust_in_peace::island::{Island, IslandEnv, IslandFactory};
-use rust_in_peace::simulation::Simulation;
-use rust_in_peace::utils;
+use ramp::island::{Island, IslandEnv, IslandFactory};
+use ramp::simulation::Simulation;
+use ramp::utils;
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::settings::SimulationSettings;
 use crate::ws_island::WSIsland;
-use rust_in_peace::metrics::MetricHub;
+use ramp::metrics::MetricHub;
 
 mod agent_types;
 mod settings;

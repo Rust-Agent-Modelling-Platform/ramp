@@ -16,8 +16,8 @@ use crate::action::Action;
 use crate::agent::Agent;
 use crate::settings::AgentSettings;
 use crate::utils;
-use rust_in_peace::island::{Island, IslandEnv};
-use rust_in_peace::message::Message;
+use ramp::island::{Island, IslandEnv};
+use ramp::message::Message;
 
 const LOCAL_MIGRATION_THRESHOLD: u32 = 50;
 

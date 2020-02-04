@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate serde_derive;
 
-use rust_in_peace::island::{Island, IslandEnv, IslandFactory};
+use ramp::island::{Island, IslandEnv, IslandFactory};
 use uuid::Uuid;
 
 use crate::map_island::MapIsland;

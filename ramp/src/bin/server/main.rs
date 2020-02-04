@@ -1,7 +1,7 @@
-use rust_in_peace::message::Message;
-use rust_in_peace::network::recv_rr;
-use rust_in_peace::settings::ServerSettings;
-use rust_in_peace::{metrics, network, utils};
+use ramp::message::Message;
+use ramp::network::recv_rr;
+use ramp::settings::ServerSettings;
+use ramp::{metrics, network, utils};
 use std::thread;
 use zmq::Socket;
 

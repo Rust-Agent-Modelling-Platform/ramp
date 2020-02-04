@@ -1,8 +1,8 @@
-# Rust In Peace
+# RAMP 
 
-Multi agent system written in Rust
+Distributed multiagent system written in Rust
 
-To run our system just go to `rust-in-peace` directory and type:
+To run our system just go to `ramp` directory and type:
 
 ```bash
 # runs server for global synchronization
@@ -33,3 +33,4 @@ After starting grafana you have to import dashboards from `promviz/dashboards` d
 To see results in `node-exporter` dashboard you have to install and run [node_exporter](https://github.com/prometheus/node_exporter) on your own.
 
 [how to import dashborad](https://grafana.com/docs/grafana/latest/reference/export_import/#importing-a-dashboard)
+
